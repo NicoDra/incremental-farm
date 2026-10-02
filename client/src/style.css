@@ -66,11 +66,12 @@ button {
   position: absolute;
   top: 0.6rem;
   left: 0.6rem;
-  right: 0.6rem;
+  right: min(23rem, 92vw);
   display: flex;
   align-items: center;
   gap: 0.6rem;
   pointer-events: auto;
+  z-index: 10;
 }
 
 #brand,
@@ -189,7 +190,7 @@ button {
 #global-menu {
   position: absolute;
   top: 3.4rem;
-  right: 3.6rem;
+  right: min(23.2rem, 92vw);
   background: var(--paper);
   border: 3px solid var(--ink);
   border-radius: 0.7rem;
@@ -329,42 +330,52 @@ button {
   position: absolute;
   left: 0.6rem;
   top: 4.2rem;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
-  max-width: min(92vw, 36rem);
+  display: grid;
+  grid-template-columns: 2.9rem minmax(11rem, 18rem);
+  align-items: start;
+  gap: 0.45rem;
+  max-width: min(82vw, 23rem);
   pointer-events: auto;
 }
 
 #sel-panel {
   position: static;
   display: flex;
-  gap: 0.5rem;
-  align-items: center;
+  gap: 0.4rem;
+  align-items: flex-start;
+  flex-direction: column;
   background: var(--paper);
   border: 3px solid var(--ink);
   border-radius: 0.75rem;
   box-shadow: 0 4px 0 rgba(43, 30, 20, 0.35);
   padding: 0.45rem 0.7rem;
   pointer-events: auto;
-  max-width: 94vw;
-  flex-wrap: wrap;
-  justify-content: center;
+  width: 100%;
+  max-width: 100%;
 }
 
 #sel-panel .sel-txt {
   font-weight: 900;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.sel-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  width: 100%;
 }
 
 #sel-panel button {
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   border: 2px solid var(--ink);
   border-radius: 0.5rem;
   background: var(--cream);
-  padding: 0.3rem 0.6rem;
+  padding: 0.28rem 0.4rem;
   cursor: pointer;
+  width: 100%;
 }
 
 #sel-panel button.danger {
@@ -545,7 +556,7 @@ button {
   text-transform: uppercase;
   letter-spacing: 1px;
   opacity: 0.7;
-  margin-top: 0.35rem;
+  margin: 0.45rem 0 0.3rem;
 }
 
 .build-grid {
@@ -607,6 +618,10 @@ button {
   padding: 0 0.3rem;
 }
 
+.slot-key.hidden {
+  display: none;
+}
+
 .slot-icon {
   width: 2rem;
   height: 2rem;
@@ -616,37 +631,31 @@ button {
   align-items: center;
   justify-content: center;
   font-weight: 900;
-  font-size: 0.72rem;
-  background: var(--gold);
+  font-size: 0;
+  color: transparent;
+  background: #f4ead2;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 86% 86%;
 }
 
-.slot-icon[data-icon='fan'] {
-  background: var(--teal);
-  color: var(--cream);
-}
-
-.slot-icon[data-icon='sembrador'] {
-  background: #5d6673;
-  color: var(--cream);
-}
-
-.slot-icon[data-icon='corral'] {
-  background: #f4a8bd;
-}
-
-.slot-icon[data-icon='jamonera'] {
-  background: #4a4f58;
-  color: var(--cream);
-}
-
-.slot-icon[data-icon='palomitera'] {
-  background: #b04a3e;
-  color: var(--cream);
-}
-
-.slot-icon[data-icon='rampa'] {
-  background: #b98a4a;
-}
+.slot-icon[data-icon='recta'] { background-image: url('/ui/tools/recta.svg'); }
+.slot-icon[data-icon='curva'] { background-image: url('/ui/tools/curva.svg'); }
+.slot-icon[data-icon='rampa'] { background-image: url('/ui/tools/rampa.svg'); }
+.slot-icon[data-icon='embudo'] { background-image: url('/ui/tools/embudo.svg'); }
+.slot-icon[data-icon='rebote'] { background-image: url('/ui/tools/rebote.svg'); }
+.slot-icon[data-icon='union'] { background-image: url('/ui/tools/union.svg'); }
+.slot-icon[data-icon='divisor'] { background-image: url('/ui/tools/divisor.svg'); }
+.slot-icon[data-icon='puente'] { background-image: url('/ui/tools/puente.svg'); }
+.slot-icon[data-icon='fan'] { background-image: url('/ui/tools/fan.svg'); }
+.slot-icon[data-icon='sembrador'] { background-image: url('/ui/tools/sembrador.svg'); }
+.slot-icon[data-icon='calabacera'] { background-image: url('/ui/tools/calabacera.svg'); }
+.slot-icon[data-icon='salinera'] { background-image: url('/ui/tools/salinera.svg'); }
+.slot-icon[data-icon='pienso'] { background-image: url('/ui/tools/pienso.svg'); }
+.slot-icon[data-icon='corral'] { background-image: url('/ui/tools/corral.svg'); }
+.slot-icon[data-icon='palomitera'] { background-image: url('/ui/tools/palomitera.svg'); }
+.slot-icon[data-icon='jamonera'] { background-image: url('/ui/tools/jamonera.svg'); }
+.slot-icon[data-icon='jamonera_industrial'] { background-image: url('/ui/tools/jamonera_industrial.svg'); }
 
 .slot-owned {
   font-size: 0.65rem;
@@ -708,6 +717,47 @@ button {
   padding: 0 0.5rem;
 }
 
+#debug-panel {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  z-index: 11;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 0.6rem;
+  box-shadow: 0 3px 0 rgba(43, 30, 20, 0.35);
+  padding: 0.45rem;
+  width: min(17rem, 45vw);
+  font-size: 0.72rem;
+}
+
+#debug-panel label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+#debug-panel input {
+  width: 5.5rem;
+  border: 1px solid var(--ink);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.2rem;
+}
+
+#debug-panel button {
+  border: 1px solid var(--ink);
+  border-radius: 0.35rem;
+  background: var(--cream);
+  padding: 0.2rem 0.35rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
 .up-buy.success {
   background: var(--green);
 }
@@ -756,6 +806,12 @@ button.danger {
     display: none;
   }
   /* cajón ocupa todo el ancho en pantallas angostas */
+  #topbar {
+    right: 0.6rem;
+  }
+  #global-menu {
+    right: 0.6rem;
+  }
   #drawer {
     left: 0.6rem;
     right: 0.6rem;
@@ -764,10 +820,17 @@ button.danger {
   #left-rail {
     top: 3.9rem;
     left: 0.45rem;
-    max-width: calc(100vw - 0.9rem);
+    grid-template-columns: 2.7rem minmax(9rem, 14rem);
+    max-width: calc(100vw - 1rem);
   }
   #sel-panel {
-    max-width: min(78vw, 28rem);
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 70rem) {
+  #hint {
+    display: none;
   }
 }
 
@@ -783,7 +846,10 @@ button.danger {
   #toasts {
     top: 3.4rem;
   }
-  #left-rail { top: 3.4rem; }
+  #left-rail {
+    top: 3.4rem;
+    grid-template-columns: 2.5rem minmax(8rem, 11rem);
+  }
   #drawer {
     top: 3.4rem;
     bottom: 3.8rem;

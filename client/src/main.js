@@ -11,6 +11,7 @@ import {
   DIRS8,
   DIR_NAMES,
   LEVEL_H,
+  CONVERTER_BUFFER_CAP,
   formatMoney,
   toolCost,
   snapRot8,
@@ -63,6 +64,7 @@ async function boot() {
   let showAllDirs = false;
   const history = new History(); // Ctrl+Z / Ctrl+Y (place | sell | move)
   let drag = null; // { kind:'place'|'sell', visited:Set, lastErr } mientras se barrre
+  let simPaused = false;
 
   const hud = new Hud(state, {
     onSelectTool: (type) => {
@@ -740,6 +742,96 @@ async function boot() {
     else hud.toast('Sembrador recargando… (enfriamiento breve).');
   }
 
+  function setDebugAge(age) {
+    const a = Math.max(0, Math.min(3, Number(age) || 0));
+    state.level = a;
+    parcel.applyLevel(state.level);
+    parcel.setAllowedRect(state.allowedRect());
+    toolsR.setAge(state.level);
+    toolsR.setFanTier(state.fanTier());
+    sim.setFanTier(state.fanTier());
+    sim.setModifiers(state.simModifiers());
+    state.emit();
+    updateGhost();
+    updateConfig();
+  }
+
+  function debugFillSelectedBuffers() {
+    if (!selectedKey) return hud.toast('Debug: seleccioná una máquina.');
+    const e = sim.tools.get(selectedKey);
+    if (!e || TOOLS[e.type]?.kind !== 'converter') return hud.toast('Debug: solo conversores.');
+    if (Array.isArray(e.buffer)) {
+      while (e.buffer.length < CONVERTER_BUFFER_CAP) {
+        e.buffer.push({ timeMs: TOOLS[e.type].time, jumbo: false, fatMult: 1, count: 1 });
+      }
+    }
+    if (e.inputBuffers && typeof e.inputBuffers === 'object') {
+      for (const arr of Object.values(e.inputBuffers)) {
+        if (!Array.isArray(arr)) continue;
+        while (arr.length < CONVERTER_BUFFER_CAP) arr.push({ jumbo: false, fatMult: 1 });
+      }
+    }
+    hud.toast('Debug: buffers llenos.');
+  }
+
+  function debugClearSelectedBuffers() {
+    if (!selectedKey) return hud.toast('Debug: seleccioná una máquina.');
+    const e = sim.tools.get(selectedKey);
+    if (!e || TOOLS[e.type]?.kind !== 'converter') return hud.toast('Debug: solo conversores.');
+    if (Array.isArray(e.buffer)) e.buffer.length = 0;
+    if (e.inputBuffers && typeof e.inputBuffers === 'object') {
+      for (const arr of Object.values(e.inputBuffers)) if (Array.isArray(arr)) arr.length = 0;
+    }
+    hud.toast('Debug: buffers vacíos.');
+  }
+
+  function initDebugPanel() {
+    if (!import.meta.env.DEV) return;
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get('debug') !== '1') return;
+    const panel = document.createElement('section');
+    panel.id = 'debug-panel';
+    panel.innerHTML =
+      '<b>DEBUG</b>' +
+      '<label>Dinero <input id="dbg-money" type="number" step="1" /></label>' +
+      '<button id="dbg-set-money">Fijar dinero</button>' +
+      '<label>Edad <input id="dbg-age" type="number" min="0" max="3" step="1" /></label>' +
+      '<button id="dbg-set-age">Fijar edad</button>' +
+      '<button id="dbg-unlock">Desbloquear todo</button>' +
+      '<button id="dbg-fill-buf">Llenar buffers selección</button>' +
+      '<button id="dbg-clear-buf">Vaciar buffers selección</button>' +
+      '<button id="dbg-pause">Pausar sim</button>';
+    document.getElementById('hud').appendChild(panel);
+    const $ = (id) => panel.querySelector('#' + id);
+    $('dbg-money').value = String(Math.floor(state.money));
+    $('dbg-age').value = String(state.level);
+    $('dbg-set-money').addEventListener('click', () => {
+      const v = Math.max(0, Math.floor(Number($('dbg-money').value) || 0));
+      state.money = v;
+      state.emit();
+      hud.toast(`Debug: dinero = ${formatMoney(v)}`);
+    });
+    $('dbg-set-age').addEventListener('click', () => {
+      setDebugAge($('dbg-age').value);
+      hud.toast(`Debug: edad = ${state.ageInfo().name}`);
+    });
+    $('dbg-unlock').addEventListener('click', () => {
+      setDebugAge(3);
+      state.money = Math.max(state.money, 999999);
+      state.emit();
+      $('dbg-age').value = '3';
+      $('dbg-money').value = String(Math.floor(state.money));
+      hud.toast('Debug: desbloqueado todo.');
+    });
+    $('dbg-fill-buf').addEventListener('click', () => debugFillSelectedBuffers());
+    $('dbg-clear-buf').addEventListener('click', () => debugClearSelectedBuffers());
+    $('dbg-pause').addEventListener('click', () => {
+      simPaused = !simPaused;
+      $('dbg-pause').textContent = simPaused ? 'Reanudar sim' : 'Pausar sim';
+      hud.toast(simPaused ? 'Debug: simulación pausada.' : 'Debug: simulación reanudada.');
+    });
+  }
+
   // Decisión documentada (M1.5-C §5): clic directo en sembrador EMITE y además
   // lo selecciona. Un clic = emitir + inspeccionar. Si está en enfriamiento,
   // igual selecciona (para no perder la inspección). El panel de selección
@@ -840,6 +932,7 @@ async function boot() {
   hud.showGuide();
   hud.toast('Demoler devuelve el 100% en esta edad.');
   hud.setDirsToggle(false);
+  initDebugPanel();
 
   // ---- entrada de usuario ----
 
@@ -1173,7 +1266,7 @@ async function boot() {
     acc += dt;
     let steps = 0;
     while (acc >= STEP && steps < 3) {
-      sim.step(STEP, t);
+      if (!simPaused) sim.step(STEP, t);
       acc -= STEP;
       steps++;
     }

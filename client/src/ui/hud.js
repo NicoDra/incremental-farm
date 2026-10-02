@@ -5,22 +5,22 @@
 import { TOOLS, TOOL_ORDER, TOOL_CATEGORIES, UPGRADE_LINES, formatMoney } from 'chanchos-shared';
 
 const ICONS = {
-  recta: '—',
-  curva: '⌐',
+  recta: '┃',
+  curva: '↪',
   rampa: '⤵',
-  embudo: '▽',
+  embudo: '🔻',
   union: 'Y',
-  divisor: '‡',
-  puente: '═',
-  fan: 'VE',
-  sembrador: 'SE',
-  calabacera: 'CA',
-  salinera: 'SA',
-  pienso: 'PI',
-  corral: 'CO',
-  palomitera: 'PA',
-  jamonera: 'JA',
-  jamonera_industrial: 'JI',
+  divisor: '↔',
+  puente: '⎵',
+  fan: '🌀',
+  sembrador: '🌽',
+  calabacera: '🎃',
+  salinera: '🧂',
+  pienso: '🥣',
+  corral: '🐖',
+  palomitera: '🍿',
+  jamonera: '🍖',
+  jamonera_industrial: '🏭',
 };
 
 function byId(id) {
@@ -48,6 +48,8 @@ export class Hud {
       toasts: byId('toasts'),
       guide: byId('guide'),
       sel: byId('sel-panel'),
+      btnSellGround: byId('btn-sell-ground'),
+      btnDirs: byId('btn-dirs'),
       btnHelp: byId('btn-help'),
       btnMore: byId('btn-more'),
       globalMenu: byId('global-menu'),
@@ -66,6 +68,8 @@ export class Hud {
     this.buildToolRemoveBtn = null;
     this.buildHeightButtons();
     this.buildBuildCards();
+    this.el.btnSellGround.addEventListener('click', () => this.cb.onSellGround?.());
+    this.el.btnDirs.addEventListener('click', () => this.cb.onToggleDirs?.());
     this.el.btnHelp.addEventListener('click', () => this.showGuide());
     this.el.btnMore.addEventListener('click', () => this.toggleGlobalMenu());
     this.el.actSellGround.addEventListener('click', () => {
@@ -139,12 +143,13 @@ export class Hud {
       grid.className = 'build-grid';
       for (const type of cat.tools) {
         const key = keyIdx < 9 ? String(keyIdx + 1) : '0';
+        const hasShortcut = keyIdx < 10;
         keyIdx++;
         const b = document.createElement('button');
         b.className = 'slot';
         b.dataset.type = type;
         b.innerHTML =
-          `<span class="slot-key">${key}</span>` +
+          `<span class="slot-key${hasShortcut ? '' : ' hidden'}">${hasShortcut ? key : ''}</span>` +
           `<span class="slot-icon" data-icon="${type}">${ICONS[type] || '?'}</span>` +
           `<span class="slot-owned" data-owned="${type}"></span>`;
         b.addEventListener('click', () => this.cb.onSelectTool(type));
@@ -180,6 +185,10 @@ export class Hud {
   }
 
   setDirsToggle(on) {
+    this.el.btnDirs.classList.toggle('selected', Boolean(on));
+    this.el.btnDirs.title = on
+      ? 'Ocultar direcciones (G)'
+      : 'Mostrar direcciones (G)';
     this.el.actDirs.classList.toggle('selected', Boolean(on));
     this.el.actDirs.textContent = on ? 'Ocultar direcciones (G)' : 'Mostrar direcciones (G)';
   }
@@ -191,7 +200,10 @@ export class Hud {
       if (!card) continue;
       const locked = !s.canBuyTool(type);
       const price = locked ? 'bloqueado por edad' : formatMoney(s.toolPrice(type));
-      card.title = `${TOOLS[type].name} — ${price}\n${TOOLS[type].hint}`;
+      const key = this.hotbarOrder.indexOf(type);
+      const shortcut = key >= 0 && key < 10 ? (key < 9 ? String(key + 1) : '0') : '—';
+      const seedInfo = type === 'sembrador' ? '\nNota: xN en tarjeta = cuántos sembradores colocados.' : '';
+      card.title = `${TOOLS[type].name} · ${price} · atajo ${shortcut}\n${TOOLS[type].hint}${seedInfo}`;
     }
   }
 
@@ -388,12 +400,14 @@ export class Hud {
     txt.className = 'sel-txt';
     txt.textContent = `${info.name} · frente ${info.dir} · N${info.h}`;
     el.appendChild(txt);
+    const actions = document.createElement('div');
+    actions.className = 'sel-actions';
     if (info.isSembrador) {
       const b = document.createElement('button');
-      b.textContent = 'Emitir maíz';
+      b.textContent = 'Emitir';
       b.title = 'Emite 1 choclo gratis (igual que clic en la pieza)';
       b.addEventListener('click', () => this.cb.onEmitSelected());
-      el.appendChild(b);
+      actions.appendChild(b);
     }
     if (info.isPausable) {
       const p = document.createElement('button');
@@ -401,33 +415,34 @@ export class Hud {
       p.textContent = info.isPaused ? '▶ Reanudar' : '⏸ Pausar';
       p.title = info.isPaused ? 'Reanuda el ciclo de la máquina' : 'Pausa el ciclo de la máquina';
       p.addEventListener('click', () => this.cb.onPauseToggle?.());
-      el.appendChild(p);
+      actions.appendChild(p);
     }
     const mv = document.createElement('button');
-    mv.textContent = 'Mover (gratis)';
+    mv.textContent = 'Mover';
     mv.addEventListener('click', () => this.cb.onMoveSelected());
+    actions.appendChild(mv);
     if (info.canUpgradeInPlace) {
       const up = document.createElement('button');
       up.className = 'upgrade';
       up.disabled = !info.canAffordUpgradeInPlace;
       up.textContent = info.canAffordUpgradeInPlace
-        ? `Mejorar in-place (${formatMoney(info.upgradeCost)})`
-        : `Mejorar (${formatMoney(info.upgradeCost)})`;
+        ? `Mejorar ${formatMoney(info.upgradeCost)}`
+        : `Mejorar ${formatMoney(info.upgradeCost)}`;
       up.title = 'Sube esta construcción al siguiente tier sin demoler/reponer';
       up.addEventListener('click', () => this.cb.onUpgradeSelected?.());
-      el.appendChild(up);
+      actions.appendChild(up);
     }
     const rm = document.createElement('button');
     rm.className = 'danger';
-    rm.textContent = `Demoler (+${formatMoney(info.refund)} · ${info.refundPct}%)`;
+    rm.textContent = `Demoler +${formatMoney(info.refund)}`;
     rm.addEventListener('click', () => this.cb.onSellSelected());
     const x = document.createElement('button');
     x.textContent = '✕';
     x.title = 'Cerrar';
     x.addEventListener('click', () => this.showSelection(null));
-    el.appendChild(mv);
-    el.appendChild(rm);
-    el.appendChild(x);
+    actions.appendChild(rm);
+    actions.appendChild(x);
+    el.appendChild(actions);
   }
 
   // ---- guía inicial (primer minuto) ----
