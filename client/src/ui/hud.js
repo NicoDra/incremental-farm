@@ -15,9 +15,12 @@ const ICONS = {
   fan: 'VE',
   sembrador: 'SE',
   calabacera: 'CA',
+  salinera: 'SA',
+  pienso: 'PI',
   corral: 'CO',
   palomitera: 'PA',
   jamonera: 'JA',
+  jamonera_industrial: 'JI',
 };
 
 function byId(id) {
@@ -50,6 +53,7 @@ export class Hud {
       btnDrawer: byId('btn-drawer'),
       btnMove: byId('btn-move'),
       btnRemove: byId('btn-remove'),
+      btnSellGround: byId('btn-sell-ground'),
     };
     // Orden estable = TOOL_ORDER; atajos 1-9 + 0 (décima).
     this.hotbarOrder = TOOL_ORDER.slice();
@@ -68,6 +72,7 @@ export class Hud {
     );
     this.el.btnMove.addEventListener('click', () => this.cb.onSelectMove());
     this.el.btnRemove.addEventListener('click', () => this.cb.onSelectRemove());
+    this.el.btnSellGround.addEventListener('click', () => this.cb.onSellGround?.());
     byId('btn-close-guide').addEventListener('click', () => this.hideGuide());
     state.onChange(() => this.refresh());
     // M1.5-D: cajón abierto por defecto en pantallas anchas, pestaña Construir.

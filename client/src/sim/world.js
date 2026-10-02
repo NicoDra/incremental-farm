@@ -7,7 +7,6 @@ import {
   HALF_GRID,
   DIRS8,
   MAX_BODIES,
-  RECYCLE_MS,
   DELIVERY_Z,
   LEVEL_H,
   FAN,
@@ -15,7 +14,6 @@ import {
   GROUND_FRICTION,
   PRODUCT_LINEAR_DAMPING,
   PRODUCT_ANGULAR_DAMPING,
-  GROUND_IDLE_DESPAWN_MS,
   channelSurfaceForAge,
   fanConeParams,
   TOOLS,
@@ -23,6 +21,7 @@ import {
   SPEED_LIMIT,
   EMIT_IMPULSE,
   CONVERTER_ACCEPT_SPEED,
+  CONVERTER_BUFFER_CAP,
   CHANNEL_WALL_H,
   JUMBO_SCALE,
   SEMBRADOR_MANUAL_COOLDOWN_MS,
@@ -34,6 +33,8 @@ import {
 const PRODUCT_PHYS = {
   corn: { half: [0.16, 0.16, 0.16], density: 0.8, restitution: 0.3 },
   pumpkin: { half: [0.24, 0.24, 0.24], density: 1.0, restitution: 0.25 },
+  salt: { half: [0.13, 0.13, 0.13], density: 1.1, restitution: 0.2 },
+  feed: { half: [0.2, 0.18, 0.2], density: 0.9, restitution: 0.24 },
   popcorn: { half: [0.1, 0.1, 0.1], density: 0.6, restitution: 0.5 },
   pig: { half: [0.26, 0.17, 0.34], density: 1.2, restitution: 0.3 },
   ham: { half: [0.2, 0.14, 0.24], density: 1.2, restitution: 0.25 },
@@ -371,12 +372,15 @@ export class SimWorld {
       pendingJumbo: false,
       pendingFat: 1,
       pendingCount: 1,
+      buffer: [],
+      inputBuffers: null,
+      recipeInputs: null,
     };
 
-    if (def.kind === 'channel') {
+      if (def.kind === 'channel') {
       entry.body = null;
       entry.lastExit = entry.lastExit || 0;
-    } else if (type === 'fan') {
+      } else if (type === 'fan') {
       // mástil en la esquina para no bloquear su propia corriente
       const b = this.fixedBody(c.x, baseY, c.z, yawQuatDeg(yawDeg(rot8)));
       this.addBox(b, 0.35, 0.45, 0.35, 0.1, 0.45, 0.1, 0.5);
@@ -398,6 +402,26 @@ export class SimWorld {
           this.addBox(b, 0, 0.72, 0.32, 0.35, 0.08, 0.06, 0.5);
         }
         entry.body = b;
+        if (def.kind === 'converter') {
+          const ins = Array.isArray(def.inputs) ? def.inputs.slice() : [def.input].filter(Boolean);
+          entry.recipeInputs = ins;
+          entry.inputDirs = Object.fromEntries(
+            ins.map((k) => {
+              const side = def.inputSides?.[k] || 'back';
+              const d = side === 'front'
+                ? { x: entry.dir.x, z: entry.dir.z }
+                : side === 'right'
+                  ? { x: entry.dir.z, z: -entry.dir.x }
+                  : side === 'left'
+                    ? { x: -entry.dir.z, z: entry.dir.x }
+                    : { x: -entry.dir.x, z: -entry.dir.z };
+              return [k, d];
+            }),
+          );
+          if (ins.length > 1) {
+            entry.inputBuffers = Object.fromEntries(ins.map((k) => [k, []]));
+          }
+        }
       }
 
     this.tools.set(key, entry);
@@ -464,6 +488,10 @@ export class SimWorld {
         { x: e.dir.x * EMIT_IMPULSE, y: 0, z: e.dir.z * EMIT_IMPULSE },
         { jumbo },
       );
+      if (!p && this.products.length >= MAX_BODIES) {
+        e.paused = true;
+        break;
+      }
       if (k === 0) first = p;
     }
     return first;
@@ -592,7 +620,7 @@ export class SimWorld {
       const m = this.mouthPos(e);
       const count = e.pendingCount || 1;
       for (let k = 0; k < count; k++) {
-        this.spawnProduct(
+        const out = this.spawnProduct(
           def.output,
           m.x,
           m.y + k * 0.3,
@@ -601,6 +629,10 @@ export class SimWorld {
           { x: e.dir.x * EMIT_IMPULSE, y: 0, z: e.dir.z * EMIT_IMPULSE },
           { jumbo: e.pendingJumbo, fatMult: e.pendingFat },
         );
+        if (!out && this.products.length >= MAX_BODIES) {
+          e.paused = true;
+          break;
+        }
       }
       e.pendingJumbo = false;
       e.pendingFat = 1;
@@ -608,33 +640,94 @@ export class SimWorld {
     }
     // Pasada 2 — aceptación de materia prima por la trasera.
     for (const e of convs) {
-      if (e.pending) continue;
+      if (!e.pending && Array.isArray(e.buffer) && e.buffer.length > 0) {
+        const slot = e.buffer.shift();
+        e.pending = true;
+        e.busyUntil = nowMs + (slot.timeMs || TOOLS[e.type].time);
+        e.pendingJumbo = Boolean(slot.jumbo);
+        e.pendingFat = slot.fatMult || 1;
+        e.pendingCount = slot.count || 1;
+      }
       const def = TOOLS[e.type];
+      const recipeInputs = Array.isArray(e.recipeInputs) && e.recipeInputs.length
+        ? e.recipeInputs
+        : [def.input].filter(Boolean);
+      const multiInput = recipeInputs.length > 1;
       // busca materia prima quieta dentro de la celda, entrando POR ATRÁS:
       // (pos - centro)·dir < 0.1 → centro o mitad trasera. El frente se rechaza.
       const cm = this.converterMods(e.type);
       for (let idx = 0; idx < this.products.length; idx++) {
         const p = this.products[idx];
-        if (p.kind !== def.input) continue;
+        if (!recipeInputs.includes(p.kind)) continue;
         const t = p.body.translation();
         // M1.5-D3: mayor bounding box (0.65 vs 0.55) y altura (1.5 vs 1.3) para asimilar productos jumbo cómodamente
         // M1.5-D4: altura = baseY + 0.8 → acepta productos de SU nivel y nunca
         // los del nivel superior (antes robaba jumbos que pasaban por N1).
-        if (Math.abs(t.x - e.cx) > 0.65 || Math.abs(t.z - e.cz) > 0.65 || t.y > e.baseY + 0.8) continue;
-        const along = (t.x - e.cx) * e.dir.x + (t.z - e.cz) * e.dir.z;
-        if (along > 0.1) continue; // vino del frente: no acepta (boca de entrada direccional)
+        if (Math.abs(t.x - e.cx) > 0.72 || Math.abs(t.z - e.cz) > 0.72 || t.y > e.baseY + 0.95) continue;
+        const inDir = e.inputDirs?.[p.kind] || { x: -e.dir.x, z: -e.dir.z };
+        const along = (t.x - e.cx) * inDir.x + (t.z - e.cz) * inDir.z;
+        if (along < -0.1) continue; // lado opuesto a la boca elegida: no acepta
         const v = p.body.linvel();
         // Traspaso boca-a-boca: nace a EMIT_IMPULSE y se acepta antes de frenar.
         if (Math.hypot(v.x, v.y, v.z) > CONVERTER_ACCEPT_SPEED) continue;
-        const isJumboInput = p.jumbo;
-        this.removeProduct(idx);
-        e.pending = true;
-        e.busyUntil = nowMs + (cm.time || def.time);
-        // Hereda jumbo: un choclo jumbo da palomita/cerdo jumbo.
-        e.pendingJumbo = isJumboInput;
-        e.pendingFat = cm.fat || 1;
-        e.pendingCount = Math.random() < (cm.double || 0) ? 2 : 1;
-        break;
+        const slot = {
+          timeMs: cm.time || def.time,
+          jumbo: p.jumbo,
+          fatMult: cm.fat || 1,
+          count: Math.random() < (cm.double || 0) ? 2 : 1,
+        };
+        if (multiInput) {
+          const ib = e.inputBuffers?.[p.kind];
+          if (!Array.isArray(ib) || ib.length >= CONVERTER_BUFFER_CAP) continue;
+          this.removeProduct(idx);
+          idx--;
+          ib.push({ jumbo: p.jumbo, fatMult: p.fatMult || 1 });
+          continue;
+        }
+        const q = Array.isArray(e.buffer) ? e.buffer : (e.buffer = []);
+        if (!e.pending) {
+          this.removeProduct(idx);
+          idx--;
+          e.pending = true;
+          e.busyUntil = nowMs + slot.timeMs;
+          e.pendingJumbo = slot.jumbo;
+          e.pendingFat = slot.fatMult;
+          e.pendingCount = slot.count;
+          continue;
+        }
+        if (q.length < CONVERTER_BUFFER_CAP) {
+          this.removeProduct(idx);
+          idx--;
+          q.push(slot);
+          continue;
+        }
+        else {
+          // buffer lleno: no aceptar más en este paso; el producto extra queda
+          // esperando en canaleta (sin destruirlo).
+          break;
+        }
+      }
+      if (multiInput) {
+        const ready = recipeInputs.every((k) => Array.isArray(e.inputBuffers?.[k]) && e.inputBuffers[k].length > 0);
+        if (!ready) continue;
+        const q = Array.isArray(e.buffer) ? e.buffer : (e.buffer = []);
+        const canStart = !e.pending;
+        const canQueue = q.length < CONVERTER_BUFFER_CAP;
+        if (!canStart && !canQueue) continue;
+        const used = recipeInputs.map((k) => e.inputBuffers[k].shift());
+        const slot = {
+          timeMs: cm.time || def.time,
+          jumbo: used.some((u) => u?.jumbo),
+          fatMult: cm.fat || 1,
+          count: Math.random() < (cm.double || 0) ? 2 : 1,
+        };
+        if (canStart) {
+          e.pending = true;
+          e.busyUntil = nowMs + slot.timeMs;
+          e.pendingJumbo = slot.jumbo;
+          e.pendingFat = slot.fatMult;
+          e.pendingCount = slot.count;
+        } else q.push(slot);
       }
     }
   }
@@ -747,13 +840,7 @@ export class SimWorld {
       const onBareGround = !groundEntry || TOOLS[groundEntry.type]?.kind !== 'channel';
       if (nearGround && onBareGround && speed < 0.12) {
         if (!p.groundIdleSince) p.groundIdleSince = nowMs;
-        else if (nowMs - p.groundIdleSince > GROUND_IDLE_DESPAWN_MS) {
-          this.removeProduct(idx);
-          continue;
-        }
-      } else {
-        p.groundIdleSince = 0;
-      }
+      } else p.groundIdleSince = 0;
       if (speed > SPEED_LIMIT) {
         const k = SPEED_LIMIT / speed;
         p.body.setLinvel({ x: v.x * k, y: v.y * k, z: v.z * k }, true);
@@ -764,10 +851,6 @@ export class SimWorld {
           if (nowMs - p.sleepSince > JAM_MS) {
             const e = this.entryAt(t.x, t.y, t.z);
             if (e && TOOLS[e.type].kind === 'channel') e.jamUntil = nowMs + 600;
-          }
-          if (nowMs - p.sleepSince > RECYCLE_MS) {
-            this.removeProduct(idx);
-            if (this.onRecycle) this.onRecycle(p.kind, t, nowMs, { jumbo: p.jumbo, fatMult: p.fatMult });
           }
         }
       } else {

@@ -11,6 +11,8 @@ export const MAX_LEVEL = 2;
 export const PRODUCTS = {
   corn: { name: 'Choclo Premium', value: 3 },
   pumpkin: { name: 'Calabaza Gerencial', value: 8 },
+  salt: { name: 'Sal Industrial', value: 4 },
+  feed: { name: 'Pienso Balanceado', value: 14 },
   popcorn: { name: 'Palomita Motivacional', value: 6 },
   pig: { name: 'Cerdito Ejecutivo', value: 12 },
   ham: { name: 'Jamón Premium Plus', value: 30 },
@@ -91,6 +93,24 @@ export const TOOLS = {
     interval: 5000,
     hint: 'Calabazas de peso medio. Cada 5 s.',
   },
+  salinera: {
+    name: 'Salinera Industrial',
+    base: 58,
+    kind: 'producer',
+    product: 'salt',
+    interval: 5200,
+    hint: 'Emite sal industrial por la boca frontal.',
+  },
+  pienso: {
+    name: 'Planta de Pienso',
+    base: 120,
+    kind: 'converter',
+    inputs: ['corn', 'pumpkin'],
+    inputSides: { corn: 'back', pumpkin: 'right' },
+    output: 'feed',
+    time: 3200,
+    hint: 'Mezcla choclo+calabaza: 1+1 → pienso.',
+  },
   corral: {
     name: 'Corral Ejecutivo',
     base: 60,
@@ -118,6 +138,16 @@ export const TOOLS = {
     time: 4000,
     hint: 'Traga cerditos por atrás, escupe jamón.',
   },
+  jamonera_industrial: {
+    name: 'Jamonera Industrial+',
+    base: 260,
+    kind: 'converter',
+    inputs: ['pig', 'salt'],
+    inputSides: { pig: 'back', salt: 'right' },
+    output: 'ham',
+    time: 4600,
+    hint: 'Receta premium: cerdo+sal para curado industrial.',
+  },
 };
 
 export const TOOL_ORDER = [
@@ -132,17 +162,20 @@ export const TOOL_ORDER = [
   'fan',
   'sembrador',
   'calabacera',
+  'salinera',
+  'pienso',
   'corral',
   'palomitera',
   'jamonera',
+  'jamonera_industrial',
 ];
 
 // Categorías del menú "Construir".
 export const TOOL_CATEGORIES = [
   { id: 'path', name: 'Caminos', tools: ['recta', 'curva', 'rampa', 'embudo', 'rebote', 'union', 'divisor', 'puente'] },
   { id: 'fan', name: 'Ventiladores', tools: ['fan'] },
-  { id: 'emitter', name: 'Emisores', tools: ['sembrador', 'calabacera'] },
-  { id: 'processor', name: 'Procesadores', tools: ['corral', 'palomitera', 'jamonera'] },
+  { id: 'emitter', name: 'Emisores', tools: ['sembrador', 'calabacera', 'salinera'] },
+  { id: 'processor', name: 'Procesadores', tools: ['pienso', 'corral', 'palomitera', 'jamonera', 'jamonera_industrial'] },
 ];
 
 // 8 direcciones horizontales (rot8). Índices pares = N, E, S, O (piezas de 4 dirs).
@@ -256,6 +289,15 @@ export function isChannelType(type) {
   return TOOLS[type]?.kind === 'channel';
 }
 
+function converterInputWorldDirs(toolDef, rot8) {
+  if (!toolDef || toolDef.kind !== 'converter') return [];
+  if (toolDef.inputSides && typeof toolDef.inputSides === 'object') {
+    const sides = [...new Set(Object.values(toolDef.inputSides))].filter(Boolean);
+    return sides.map((s) => localSideToWorldDir(rot8, s));
+  }
+  return [localSideToWorldDir(rot8, 'back')];
+}
+
 // Aperturas efectivas de todas las canaletas de un nivel.
 // `pieces`: [{ i, j, h, type, rot8, noAutoConnect }] con TODAS las piezas del
 // nivel (canaletas + productores/conversores). Devuelve Map key → {N,E,S,W}.
@@ -306,8 +348,8 @@ export function computeLevelOpenings(pieces) {
         }
       } else if (TOOLS[n.type]?.kind === 'producer' || TOOLS[n.type]?.kind === 'converter') {
         const outW = localSideToWorldDir(n.rot8, 'front');
-        const inW = TOOLS[n.type].kind === 'converter' ? localSideToWorldDir(n.rot8, 'back') : null;
-        if (od === outW || (inW && od === inW)) open.add(d);
+        const inWs = TOOLS[n.type].kind === 'converter' ? converterInputWorldDirs(TOOLS[n.type], n.rot8) : [];
+        if (od === outW || inWs.includes(od)) open.add(d);
         else open.delete(d); // flanco de la máquina: pared forzada
       }
       // fan u otros: sin paredes que abrir, se mantienen los defaults.
@@ -437,14 +479,14 @@ export const AGES = [
   },
   {
     id: 2, name: 'Piedra', fanTier: 2,
-    tools: ['recta', 'curva', 'rampa', 'embudo', 'rebote', 'union', 'divisor', 'puente', 'fan', 'sembrador', 'calabacera', 'palomitera', 'corral'],
-    products: ['corn', 'pumpkin', 'popcorn', 'pig'],
+    tools: ['recta', 'curva', 'rampa', 'embudo', 'rebote', 'union', 'divisor', 'puente', 'fan', 'sembrador', 'calabacera', 'salinera', 'pienso', 'palomitera', 'corral'],
+    products: ['corn', 'pumpkin', 'salt', 'feed', 'popcorn', 'pig'],
     desc: 'Corral (maíz→cerdo) + ventilador tier 3. Cerdos.',
   },
   {
     id: 3, name: 'Fábrica', fanTier: 3,
-    tools: ['recta', 'curva', 'rampa', 'embudo', 'rebote', 'union', 'divisor', 'puente', 'fan', 'sembrador', 'calabacera', 'palomitera', 'corral', 'jamonera'],
-    products: ['corn', 'pumpkin', 'popcorn', 'pig', 'ham'],
+    tools: ['recta', 'curva', 'rampa', 'embudo', 'rebote', 'union', 'divisor', 'puente', 'fan', 'sembrador', 'calabacera', 'salinera', 'pienso', 'palomitera', 'corral', 'jamonera', 'jamonera_industrial'],
+    products: ['corn', 'pumpkin', 'salt', 'feed', 'popcorn', 'pig', 'ham'],
     desc: 'Jamonera (cerdo→jamón) + ventilador tier 4. Jamones.',
   },
 ];
@@ -530,6 +572,7 @@ export const SPEED_LIMIT = MAX_PRODUCT_SPEED; // alias: código existente
 // EMIT_IMPULSE dentro del cubo del vecino; si va lento se acepta en el mismo
 // paso, antes de que la física lo expulse (ver updateConverters, doble pasada).
 export const CONVERTER_ACCEPT_SPEED = EMIT_IMPULSE + 0.1;
+export const CONVERTER_BUFFER_CAP = 3;
 
 export function comboMult(steps) {
   return Math.min(1 + steps * COMBO.step, COMBO.max);

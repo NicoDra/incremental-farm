@@ -246,6 +246,17 @@ function buildProducerGeo(type, age = 0) {
     v.add(0.3, 0.28, 0.3, -0.2, 0.3, -0.1, '#e08a3c'); // calabazas deco
     v.add(0.24, 0.22, 0.24, 0.22, 0.27, 0.15, '#d97f33');
     v.add(0.4, 0.3, 0.1, 0, 0.15, -0.42, '#4a3820'); // boca: tranquera
+  } else if (type === 'salinera') {
+    v.add(0.82, 0.22, 0.82, 0, 0.11, 0, '#d8dae2');
+    v.add(0.7, 0.3, 0.7, 0, 0.38, 0, '#ececf0');
+    v.add(0.22, 0.18, 0.22, -0.2, 0.6, 0.15, '#ffffff');
+    v.add(0.4, 0.26, 0.1, 0, 0.16, -0.42, '#4a3820');
+  } else if (type === 'pienso') {
+    v.add(0.86, 0.78, 0.86, 0, 0.39, 0, '#6e5a46');
+    v.add(0.7, 0.14, 0.7, 0, 0.84, 0, GOLD);
+    v.add(0.22, 0.4, 0.22, -0.22, 0.95, 0.12, '#9a9aa2');
+    mouthBox(v, 0.42);
+    v.add(0.52, 0.34, 0.12, 0, 0.42, 0.4, DARK);
   } else if (type === 'corral') {
     const fence = '#8a5f36';
     for (const px of [-0.42, 0.42]) {
@@ -280,6 +291,15 @@ function buildProducerGeo(type, age = 0) {
     v.add(0.2, 0.14, 0.14, -0.25, 0.78, 0.32, '#7d8794');
     mouthBox(v, 0.4);
     v.add(0.55, 0.35, 0.12, 0, 0.4, 0.4, DARK); // abertura trasera (entrada)
+  } else if (type === 'jamonera_industrial') {
+    const iron = age >= 3 ? P.metal : '#4a4f58';
+    v.add(0.9, 0.9, 0.9, 0, 0.45, 0, iron);
+    v.add(0.84, 0.14, 0.84, 0, 0.96, 0, '#2b2620');
+    v.add(0.18, 0.58, 0.18, -0.25, 1.08, -0.15, '#6b7078');
+    v.add(0.18, 0.58, 0.18, 0.25, 1.08, -0.15, '#6b7078');
+    mouthBox(v, 0.44);
+    v.add(0.26, 0.3, 0.12, -0.2, 0.44, 0.42, DARK);
+    v.add(0.26, 0.3, 0.12, 0.2, 0.44, 0.42, DARK);
   }
   return v.build();
 }

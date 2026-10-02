@@ -33,6 +33,22 @@ function popcornGeometry() {
   return v.build();
 }
 
+function saltGeometry() {
+  const v = voxelBuilder();
+  v.add(0.18, 0.16, 0.18, 0, 0, 0, '#ececf0');
+  v.add(0.14, 0.1, 0.14, 0.03, 0.1, -0.02, '#d8dae2');
+  v.add(0.1, 0.08, 0.1, -0.04, 0.15, 0.03, '#ffffff');
+  return v.build();
+}
+
+function feedGeometry() {
+  const v = voxelBuilder();
+  v.add(0.32, 0.22, 0.28, 0, 0, 0, '#b68f56');
+  v.add(0.28, 0.08, 0.24, 0, 0.14, 0, '#d2ab6f');
+  v.add(0.1, 0.1, 0.1, -0.08, 0.05, 0.07, '#7fae4a');
+  return v.build();
+}
+
 function pigGeometry() {
   const v = voxelBuilder();
   const body = '#f4a8bd';
@@ -65,6 +81,8 @@ function hamGeometry() {
 const BUILDERS = {
   corn: cornGeometry,
   pumpkin: pumpkinGeometry,
+  salt: saltGeometry,
+  feed: feedGeometry,
   popcorn: popcornGeometry,
   pig: pigGeometry,
   ham: hamGeometry,

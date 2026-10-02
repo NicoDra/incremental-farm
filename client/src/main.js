@@ -125,6 +125,7 @@ async function boot() {
     onSellSelected: () => sellSelected(),
     onUpgradeSelected: () => upgradeSelectedInPlace(),
     onPauseToggle: () => togglePauseSelected(),
+    onSellGround: () => sellAllGround(),
   });
   hud.setHeight(0);
 
@@ -945,6 +946,27 @@ async function boot() {
     return true;
   }
 
+  function sellAllGround() {
+    let sold = 0;
+    let total = 0;
+    for (let idx = sim.products.length - 1; idx >= 0; idx--) {
+      const p = sim.products[idx];
+      const t = p.body.translation();
+      const value = state.recycleValue(p.kind, { jumbo: p.jumbo, fatMult: p.fatMult });
+      sim.removeProduct(idx);
+      sold++;
+      total += value;
+      fx.float(t.x, Math.max(t.y, 0.5) + 0.4, t.z, `+${formatMoney(value)} venta suelta`, 'gray', value);
+    }
+    if (!sold) {
+      hud.toast('No hay producto suelto para vender.');
+      return;
+    }
+    state.addMoney(total);
+    hud.pulseMoney();
+    hud.toast(`Vendidos ${sold} sueltos por ${formatMoney(total)}.`);
+  }
+
   canvas.addEventListener('pointerup', (e) => {
     if (!downInfo) return;
     const moved = Math.hypot(e.clientX - downInfo.x, e.clientY - downInfo.y);
@@ -1001,8 +1023,7 @@ async function boot() {
       updateConfig();
       hud.toast('Pieza re-colocada sin costo. Gerencia aplaude.');
     } else if (mode) tryPlace(mode.type, hoverCell, { noAutoConnect: e.shiftKey });
-    else if (!findAtCell(hoverCell) && tryCollectGround(e)) return;
-    else selectAt(hoverCell);
+    else if (!tryCollectGround(e)) selectAt(hoverCell);
   });
 
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
