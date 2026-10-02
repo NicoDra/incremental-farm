@@ -1,0 +1,8 @@
+packages:
+  - shared
+  - client
+
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  esbuild: set this to true or false

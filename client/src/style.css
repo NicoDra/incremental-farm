@@ -1,0 +1,770 @@
+:root {
+  --ink: #2b1e14;
+  --cream: #f7edd8;
+  --paper: #fff8e7;
+  --pink: #f2a2b0;
+  --green: #7fae4a;
+  --gold: #f2c94c;
+  --red: #d9534f;
+  --teal: #4a9e94;
+  --dock-h: clamp(3.5rem, 12vh, 5.5rem);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Trebuchet MS', 'Segoe UI', Verdana, sans-serif;
+  background: #bfd9e8;
+  color: var(--ink);
+  font-size: clamp(0.8rem, 1.1vw + 0.6rem, 1rem);
+}
+
+button {
+  font-family: inherit;
+  touch-action: manipulation;
+}
+
+/* Utilidad: ocultar paneles/insignias/guía. Con !important porque varios
+   elementos (#guide, #sel-panel) fijan display por ID y si no la pisan. */
+.hidden {
+  display: none !important;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---------- barra superior mínima ---------- */
+
+#topbar {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  right: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  pointer-events: auto;
+}
+
+#brand,
+#stats,
+#top-actions button {
+  background: var(--cream);
+  border: 3px solid var(--ink);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 0 rgba(43, 30, 20, 0.35);
+}
+
+#brand {
+  padding: 0.45rem 0.8rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+#brand strong {
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+#brand strong em {
+  font-style: normal;
+  background: var(--pink);
+  border: 2px solid var(--ink);
+  border-radius: 0.35rem;
+  padding: 0 0.35rem;
+}
+
+#level-name {
+  font-size: 0.72rem;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+#stats {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.8rem;
+}
+
+#money {
+  font-size: 1.35rem;
+  font-weight: 900;
+  min-width: 5.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  transition: transform 0.12s ease;
+}
+
+#money.pulse {
+  transform: scale(1.15);
+  color: #5c8a2a;
+}
+
+#age-badge {
+  background: var(--green);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 0.1rem 0.7rem;
+  font-weight: 900;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+#combo-badge {
+  background: var(--pink);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  font-weight: 900;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#combo-badge .combo-bar {
+  display: block;
+  height: 4px;
+  background: var(--ink);
+  border-radius: 2px;
+  margin-top: 3px;
+  overflow: hidden;
+}
+
+#combo-badge .combo-fill {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+}
+
+#top-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#top-actions button {
+  width: 2.6rem;
+  height: 2.6rem;
+  font-size: 1.15rem;
+  font-weight: 900;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+#top-actions button.selected {
+  background: var(--gold);
+}
+
+/* ---------- guía inicial ---------- */
+
+#guide {
+  position: absolute;
+  top: 4.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(34rem, 92vw);
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 0 rgba(43, 30, 20, 0.35);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+  pointer-events: auto;
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  z-index: 5;
+}
+
+#guide button {
+  flex: none;
+  font-weight: 700;
+  background: var(--pink);
+  border: 2px solid var(--ink);
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+/* ---------- flotantes y toasts (centro-arriba, fuera del camino) ----------
+   Escala z (mayor pinta arriba): #drawer 9 > #toasts 8 > #floats 6 >
+   #guide 5 > #dock/#sel-panel/#hint sin z-index (auto, orden DOM) > escena.
+   Los números de dinero quedan sobre el dock y el panel de selección, pero
+   bajo toasts y cajón. overflow visible para no recortar texto en los bordes. */
+
+#floats {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.float {
+  position: absolute;
+  font-weight: 900;
+  font-size: 1.1rem;
+  text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000,
+    0 2px 4px rgba(0, 0, 0, 0.65);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.float.gold {
+  color: var(--gold);
+}
+
+.float.red {
+  color: var(--red);
+}
+
+.float.gray {
+  color: #cfc8ba;
+  font-size: 0.85rem;
+}
+
+#toasts {
+  position: absolute;
+  top: 4.2rem;
+  right: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.toast {
+  background: var(--ink);
+  color: var(--cream);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8rem;
+  max-width: min(20rem, 80vw);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+  animation: toast-in 0.25s ease;
+  transition: opacity 0.4s ease;
+}
+
+.toast.out {
+  opacity: 0;
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ---------- panel de selección ---------- */
+
+/* Panel de selección: pila dentro de #dock, fila estática centrada sobre los
+   controles (N0/N1/N2 + Mover/Demoler). Nunca puede taparlos: es in-flow y
+   cuando hud.js agrega .hidden desaparece sin dejar hueco. */
+#sel-panel {
+  position: static;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 0 rgba(43, 30, 20, 0.35);
+  padding: 0.45rem 0.7rem;
+  pointer-events: auto;
+  max-width: 94vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#sel-panel .sel-txt {
+  font-weight: 900;
+  font-size: 0.85rem;
+}
+
+#sel-panel button {
+  font-weight: 700;
+  font-size: 0.8rem;
+  border: 2px solid var(--ink);
+  border-radius: 0.5rem;
+  background: var(--cream);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+#sel-panel button.danger {
+  background: #fbe9e7;
+}
+
+#sel-panel button.upgrade {
+  background: #e8f3e2;
+}
+
+#sel-panel button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ---------- cajón lateral único ---------- */
+
+#drawer {
+  position: absolute;
+  top: 4.2rem;
+  right: 0.6rem;
+  bottom: calc(var(--dock-h) + 2.2rem);
+  width: min(22rem, 92vw);
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 0 rgba(43, 30, 20, 0.35);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 9;
+}
+
+#drawer-tabs {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.5rem;
+  border-bottom: 2px solid var(--ink);
+  background: var(--cream);
+}
+
+.drawer-tab {
+  flex: 1;
+  font-weight: 900;
+  font-size: 0.82rem;
+  border: 2px solid var(--ink);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  padding: 0.35rem 0.2rem;
+  cursor: pointer;
+}
+
+.drawer-tab.selected {
+  background: var(--gold);
+}
+
+#btn-close-drawer {
+  flex: none;
+  width: 2rem;
+  border: 2px solid var(--ink);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+#drawer-body {
+  overflow-y: auto;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.drawer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.83rem;
+}
+
+.slots-line,
+.age-cur {
+  font-weight: 900;
+}
+
+.up-row {
+  border: 2px solid var(--ink);
+  border-radius: 0.6rem;
+  background: var(--cream);
+  padding: 0.45rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.up-focus {
+  border: 2px solid var(--ink);
+  border-radius: 0.6rem;
+  background: #efe7d3;
+  padding: 0.45rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.up-focus-muted {
+  opacity: 0.75;
+  font-size: 0.78rem;
+}
+
+.up-name {
+  font-weight: 700;
+}
+
+.up-desc {
+  font-size: 0.76rem;
+  opacity: 0.8;
+}
+
+.up-buy,
+.age-buy {
+  font-weight: 900;
+  font-size: 0.8rem;
+  border: 2px solid var(--ink);
+  border-radius: 0.5rem;
+  background: var(--green);
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+
+.up-buy:disabled,
+.age-buy:disabled {
+  background: #b9b3a4;
+  cursor: not-allowed;
+  opacity: 0.8;
+  font-weight: 700;
+}
+
+.age-next {
+  border: 2px solid var(--ink);
+  border-radius: 0.6rem;
+  background: var(--cream);
+  padding: 0.5rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* ---------- dock inferior: hotbar (pila: sel-panel arriba, controles abajo) ---------- */
+
+#dock {
+  position: absolute;
+  left: 50%;
+  bottom: 2rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: auto;
+  max-width: 96vw;
+}
+
+#dock-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.6rem;
+  max-width: 96vw;
+}
+
+#height-sel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.height-btn {
+  font-weight: 900;
+  font-size: 0.85rem;
+  width: 2.9rem;
+  height: 2.1rem;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 0.5rem;
+  box-shadow: 0 3px 0 rgba(43, 30, 20, 0.35);
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.height-btn.selected {
+  background: var(--gold);
+}
+
+/* ---------- pestaña Construir (dentro del cajón) ---------- */
+
+.build-group h4 {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.7;
+  margin-top: 0.35rem;
+}
+
+.build-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
+  gap: 0.5rem;
+}
+
+.build-grid .slot {
+  width: 100%;
+  height: 3.6rem;
+}
+
+.slot {
+  position: relative;
+  flex: none;
+  width: 3.4rem;
+  height: 3.4rem;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 0.7rem;
+  box-shadow: 0 4px 0 rgba(43, 30, 20, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.slot:hover {
+  transform: translateY(-3px);
+}
+
+.slot.selected {
+  outline: 3px solid var(--green);
+  transform: translateY(-4px);
+  background: #f3f7e8;
+}
+
+.slot.locked {
+  opacity: 0.45;
+  filter: grayscale(0.7);
+}
+
+.slot.broke .slot-icon {
+  outline: 2px dashed var(--red);
+}
+
+.slot-key {
+  position: absolute;
+  top: -0.55rem;
+  left: -0.4rem;
+  background: var(--ink);
+  color: var(--cream);
+  border-radius: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 900;
+  padding: 0 0.3rem;
+}
+
+.slot-icon {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid var(--ink);
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 0.72rem;
+  background: var(--gold);
+}
+
+.slot-icon[data-icon='fan'] {
+  background: var(--teal);
+  color: var(--cream);
+}
+
+.slot-icon[data-icon='sembrador'] {
+  background: #5d6673;
+  color: var(--cream);
+}
+
+.slot-icon[data-icon='corral'] {
+  background: #f4a8bd;
+}
+
+.slot-icon[data-icon='jamonera'] {
+  background: #4a4f58;
+  color: var(--cream);
+}
+
+.slot-icon[data-icon='palomitera'] {
+  background: #b04a3e;
+  color: var(--cream);
+}
+
+.slot-icon[data-icon='rampa'] {
+  background: #b98a4a;
+}
+
+.slot-owned {
+  font-size: 0.65rem;
+  font-weight: 900;
+  min-height: 0.8rem;
+  opacity: 0.7;
+}
+
+#mode-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+#mode-btns button {
+  font-weight: 900;
+  font-size: 0.8rem;
+  border: 3px solid var(--ink);
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  background: var(--paper);
+  min-height: 2.75rem;
+  min-width: 5.5rem;
+}
+
+#btn-remove.selected {
+  background: #fbe9e7;
+  outline: 3px solid var(--red);
+}
+
+#btn-move.selected {
+  background: #e8f3e2;
+  outline: 3px solid var(--green);
+}
+
+#cfg {
+  font-weight: 700;
+  background: rgba(247, 237, 216, 0.9);
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  padding: 1px 8px;
+}
+
+#hint {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.7rem;
+  color: rgba(43, 30, 20, 0.8);
+  text-shadow: 0 1px 0 rgba(255, 248, 231, 0.6);
+  pointer-events: none;
+  padding: 0 0.5rem;
+}
+
+.up-buy.success {
+  background: var(--green);
+}
+
+.up-buy.danger {
+  background: var(--red);
+}
+
+button.success {
+  background: #e8f5e9;
+  border-color: #2e7d32;
+  color: #2e7d32;
+}
+
+button.danger {
+  background: #ffebee;
+  border-color: #c62828;
+  color: #c62828;
+}
+
+#hint kbd {
+  background: var(--ink);
+  color: var(--cream);
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 0.68rem;
+}
+
+/* ---------- responsivo ---------- */
+
+@media (max-width: 56rem) {
+  #brand strong {
+    font-size: 0.9rem;
+  }
+  #level-name {
+    display: none;
+  }
+  #money {
+    font-size: 1.1rem;
+  }
+  .slot {
+    width: 3rem;
+    height: 3rem;
+  }
+  #hint {
+    display: none;
+  }
+  /* cajón ocupa todo el ancho en pantallas angostas */
+  #drawer {
+    left: 0.6rem;
+    right: 0.6rem;
+    width: auto;
+  }
+}
+
+@media (max-height: 30rem) {
+  /* móvil horizontal: dock compacto, cajón flotante bajo */
+  :root {
+    --dock-h: 3.2rem;
+  }
+  #topbar {
+    top: 0.35rem;
+  }
+  #guide,
+  #toasts {
+    top: 3.4rem;
+  }
+  #dock {
+    bottom: 0.4rem;
+  }
+  #drawer {
+    top: 3.4rem;
+    bottom: 3.8rem;
+    left: 0.6rem;
+    right: 0.6rem;
+    width: auto;
+  }
+}

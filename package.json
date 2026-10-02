@@ -1,0 +1,11 @@
+{
+  "name": "chanchos-sa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter chanchos-client dev",
+    "build": "pnpm --filter chanchos-client build",
+    "preview": "pnpm --filter chanchos-client preview"
+  }
+}

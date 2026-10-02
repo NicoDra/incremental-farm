@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chanchos S.A. — Simulador Agrocorporativo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+      <div id="hud">
+        <header id="topbar">
+          <div id="brand">
+            <strong>CHANCHOS <em>S.A.</em></strong>
+            <span id="level-name">Corral de Barro S.A.</span>
+          </div>
+          <div id="stats">
+            <div id="money" title="Monedas">$50</div>
+            <div id="age-badge" title="Edad actual">Barro</div>
+            <div id="combo-badge" class="hidden">COMBO</div>
+          </div>
+          <div id="top-actions">
+            <button id="btn-dirs" title="Mostrar todas las direcciones (G)">⇄</button>
+            <button id="btn-help" title="Ayuda (P)">?</button>
+            <button id="btn-drawer" title="Abrir panel: mejoras y edad (E)">☰</button>
+          </div>
+        </header>
+
+        <div id="guide" class="hidden">
+          <p><b>Primer minuto:</b> hacé clic en el <b>sembrador</b> para emitir maíz gratis, y conectalo al <b>portal norte</b> con canaletas.</p>
+          <button id="btn-close-guide">Entendido</button>
+        </div>
+
+        <div id="floats"></div>
+        <div id="toasts"></div>
+
+        <aside id="drawer" class="hidden" aria-label="Panel lateral">
+          <div id="drawer-tabs">
+            <button data-tab="build" class="drawer-tab selected">Construir</button>
+            <button data-tab="up" class="drawer-tab">Mejoras</button>
+            <button data-tab="age" class="drawer-tab">Edad</button>
+            <button id="btn-close-drawer" title="Cerrar (Esc)">✕</button>
+          </div>
+          <div id="drawer-body">
+            <section data-panel="build" class="drawer-panel"></section>
+            <section data-panel="up" class="drawer-panel hidden"></section>
+            <section data-panel="age" class="drawer-panel hidden"></section>
+          </div>
+        </aside>
+
+        <footer id="dock">
+          <div id="sel-panel" class="hidden"></div>
+          <div id="dock-controls">
+            <div id="height-sel" title="Altura de construcción (H rota N0→N1→N2)"></div>
+            <div id="mode-btns">
+              <button id="btn-move" title="Mover pieza colocada, gratis (M)">Mover</button>
+              <button id="btn-remove" title="Demoler con reembolso (X)">Demoler</button>
+            </div>
+          </div>
+        </footer>
+        <div id="hint">
+          Clic: colocar · Arrastrar: barrer celdas · Clic en pieza: inspeccionar ·
+          <kbd>1</kbd>–<kbd>9</kbd>/<kbd>0</kbd>: pieza · <kbd>R</kbd>: rotar · <kbd>H</kbd>: altura ·
+          <kbd>I</kbd>: copiar · <kbd>Ctrl</kbd>+<kbd>Z</kbd>: deshacer · Clic derecho: cancelar · <span id="cfg"></span>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
