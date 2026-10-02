@@ -85,14 +85,14 @@ function steps(sim, n) {
   ok(Boolean(e.paused), 'emisor: queda pausado por cap');
 }
 
-// ---- 5) UI estática: botón vender suelo + prioridad clic producto ----
+// ---- 5) UI estática: menú global vender suelo + prioridad clic producto ----
 {
   const root = dirname(fileURLToPath(import.meta.url));
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   const hud = readFileSync(join(root, 'src', 'ui', 'hud.js'), 'utf8');
   const main = readFileSync(join(root, 'src', 'main.js'), 'utf8');
-  ok(/id="btn-sell-ground"/.test(html), 'UI: existe #btn-sell-ground');
-  ok(/btnSellGround/.test(hud), 'UI: hud referencia btnSellGround');
+  ok(/id="act-sell-ground"/.test(html), 'UI: existe #act-sell-ground');
+  ok(/actSellGround/.test(hud), 'UI: hud referencia actSellGround');
   ok(/onSellGround/.test(hud), 'UI: hud cablea callback onSellGround');
   ok(/onSellGround\s*:\s*\(\)\s*=>/.test(main), 'UI: main pasa callback onSellGround');
   ok(

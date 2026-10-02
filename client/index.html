@@ -21,11 +21,17 @@
             <div id="combo-badge" class="hidden">COMBO</div>
           </div>
           <div id="top-actions">
-            <button id="btn-dirs" title="Mostrar todas las direcciones (G)">⇄</button>
             <button id="btn-help" title="Ayuda (P)">?</button>
+            <button id="btn-more" title="Acciones globales">⋯</button>
             <button id="btn-drawer" title="Abrir panel: mejoras y edad (E)">☰</button>
           </div>
         </header>
+
+        <div id="global-menu" class="hidden">
+          <button id="act-sell-ground">Vender suelo</button>
+          <button id="act-reset">Reiniciar parcela</button>
+          <button id="act-dirs">Mostrar direcciones (G)</button>
+        </div>
 
         <div id="guide" class="hidden">
           <p><b>Primer minuto:</b> hacé clic en el <b>sembrador</b> para emitir maíz gratis, y conectalo al <b>portal norte</b> con canaletas.</p>
@@ -49,17 +55,10 @@
           </div>
         </aside>
 
-        <footer id="dock">
+        <div id="left-rail">
+          <div id="height-sel" title="Altura de construcción ([ y ])"></div>
           <div id="sel-panel" class="hidden"></div>
-          <div id="dock-controls">
-            <div id="height-sel" title="Altura de construcción (H rota N0→N1→N2)"></div>
-            <div id="mode-btns">
-              <button id="btn-move" title="Mover pieza colocada, gratis (M)">Mover</button>
-              <button id="btn-remove" title="Demoler con reembolso (X)">Demoler</button>
-              <button id="btn-sell-ground" title="Vender todo lo suelto (suelo/canaletas)">Vender suelo</button>
-            </div>
-          </div>
-        </footer>
+        </div>
         <div id="hint">
           Clic: colocar · Arrastrar: barrer celdas · Clic en pieza: inspeccionar ·
           <kbd>1</kbd>–<kbd>9</kbd>/<kbd>0</kbd>: pieza · <kbd>R</kbd>: rotar · <kbd>H</kbd>: altura ·

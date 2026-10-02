@@ -186,6 +186,32 @@ button {
   background: var(--gold);
 }
 
+#global-menu {
+  position: absolute;
+  top: 3.4rem;
+  right: 3.6rem;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 0.7rem;
+  box-shadow: 0 4px 0 rgba(43, 30, 20, 0.35);
+  pointer-events: auto;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem;
+}
+
+#global-menu button {
+  font-weight: 800;
+  border: 2px solid var(--ink);
+  border-radius: 0.5rem;
+  background: var(--cream);
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+  text-align: left;
+}
+
 /* ---------- guía inicial ---------- */
 
 #guide {
@@ -294,11 +320,22 @@ button {
   }
 }
 
-/* ---------- panel de selección ---------- */
+/* ---------- panel de selección + selector vertical ---------- */
 
 /* Panel de selección: pila dentro de #dock, fila estática centrada sobre los
    controles (N0/N1/N2 + Mover/Demoler). Nunca puede taparlos: es in-flow y
    cuando hud.js agrega .hidden desaparece sin dejar hueco. */
+#left-rail {
+  position: absolute;
+  left: 0.6rem;
+  top: 4.2rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  max-width: min(92vw, 36rem);
+  pointer-events: auto;
+}
+
 #sel-panel {
   position: static;
   display: flex;
@@ -478,29 +515,6 @@ button {
   gap: 0.3rem;
 }
 
-/* ---------- dock inferior: hotbar (pila: sel-panel arriba, controles abajo) ---------- */
-
-#dock {
-  position: absolute;
-  left: 50%;
-  bottom: 2rem;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  pointer-events: auto;
-  max-width: 96vw;
-}
-
-#dock-controls {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 0.6rem;
-  max-width: 96vw;
-}
-
 #height-sel {
   display: flex;
   flex-direction: column;
@@ -641,32 +655,36 @@ button {
   opacity: 0.7;
 }
 
-#mode-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-#mode-btns button {
-  font-weight: 900;
-  font-size: 0.8rem;
-  border: 3px solid var(--ink);
+.build-tools {
+  border: 2px solid var(--ink);
   border-radius: 0.6rem;
-  padding: 0.4rem 0.7rem;
-  cursor: pointer;
+  background: #efe7d3;
+  padding: 0.45rem;
+}
+
+.build-tools-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.tool-mode {
+  font-weight: 900;
+  border: 2px solid var(--ink);
+  border-radius: 0.5rem;
   background: var(--paper);
-  min-height: 2.75rem;
-  min-width: 5.5rem;
+  padding: 0.36rem 0.5rem;
+  cursor: pointer;
 }
 
-#btn-remove.selected {
-  background: #fbe9e7;
-  outline: 3px solid var(--red);
-}
-
-#btn-move.selected {
+.tool-mode.selected {
   background: #e8f3e2;
-  outline: 3px solid var(--green);
+  outline: 2px solid var(--green);
+}
+
+.tool-mode.danger.selected {
+  background: #fbe9e7;
+  outline: 2px solid var(--red);
 }
 
 #cfg {
@@ -743,6 +761,14 @@ button.danger {
     right: 0.6rem;
     width: auto;
   }
+  #left-rail {
+    top: 3.9rem;
+    left: 0.45rem;
+    max-width: calc(100vw - 0.9rem);
+  }
+  #sel-panel {
+    max-width: min(78vw, 28rem);
+  }
 }
 
 @media (max-height: 30rem) {
@@ -757,9 +783,7 @@ button.danger {
   #toasts {
     top: 3.4rem;
   }
-  #dock {
-    bottom: 0.4rem;
-  }
+  #left-rail { top: 3.4rem; }
   #drawer {
     top: 3.4rem;
     bottom: 3.8rem;

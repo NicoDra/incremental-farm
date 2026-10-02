@@ -48,12 +48,13 @@ export class Hud {
       toasts: byId('toasts'),
       guide: byId('guide'),
       sel: byId('sel-panel'),
-      btnDirs: byId('btn-dirs'),
       btnHelp: byId('btn-help'),
+      btnMore: byId('btn-more'),
+      globalMenu: byId('global-menu'),
+      actSellGround: byId('act-sell-ground'),
+      actReset: byId('act-reset'),
+      actDirs: byId('act-dirs'),
       btnDrawer: byId('btn-drawer'),
-      btnMove: byId('btn-move'),
-      btnRemove: byId('btn-remove'),
-      btnSellGround: byId('btn-sell-ground'),
     };
     // Orden estable = TOOL_ORDER; atajos 1-9 + 0 (décima).
     this.hotbarOrder = TOOL_ORDER.slice();
@@ -61,19 +62,36 @@ export class Hud {
     this.upgradeFocusType = null;
     this.upgradeFocusInfo = null;
     this._guideTimer = null;
+    this.buildToolMoveBtn = null;
+    this.buildToolRemoveBtn = null;
     this.buildHeightButtons();
     this.buildBuildCards();
-    this.el.btnDirs.addEventListener('click', () => this.cb.onToggleDirs());
     this.el.btnHelp.addEventListener('click', () => this.showGuide());
+    this.el.btnMore.addEventListener('click', () => this.toggleGlobalMenu());
+    this.el.actSellGround.addEventListener('click', () => {
+      this.cb.onSellGround?.();
+      this.hideGlobalMenu();
+    });
+    this.el.actReset.addEventListener('click', () => {
+      this.cb.onReset?.();
+      this.hideGlobalMenu();
+    });
+    this.el.actDirs.addEventListener('click', () => {
+      this.cb.onToggleDirs?.();
+      this.hideGlobalMenu();
+    });
     this.el.btnDrawer.addEventListener('click', () => this.toggleDrawer());
     byId('btn-close-drawer').addEventListener('click', () => this.closeDrawer());
     this.el.drawerTabs.forEach((t) =>
       t.addEventListener('click', () => this.openDrawer(t.dataset.tab)),
     );
-    this.el.btnMove.addEventListener('click', () => this.cb.onSelectMove());
-    this.el.btnRemove.addEventListener('click', () => this.cb.onSelectRemove());
-    this.el.btnSellGround.addEventListener('click', () => this.cb.onSellGround?.());
     byId('btn-close-guide').addEventListener('click', () => this.hideGuide());
+    document.addEventListener?.('pointerdown', (ev) => {
+      if (this.el.globalMenu.classList.contains('hidden')) return;
+      const t = ev.target;
+      if (this.el.globalMenu.contains(t) || this.el.btnMore.contains(t)) return;
+      this.hideGlobalMenu();
+    });
     state.onChange(() => this.refresh());
     // M1.5-D: cajón abierto por defecto en pantallas anchas, pestaña Construir.
     if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width: 56rem)').matches) {
@@ -88,6 +106,28 @@ export class Hud {
     this.cards = new Map();
     const sec = this.el.panels.build;
     sec.innerHTML = '';
+    const toolsBox = document.createElement('div');
+    toolsBox.className = 'build-tools';
+    const toolsHead = document.createElement('h4');
+    toolsHead.textContent = 'Herramientas';
+    toolsBox.appendChild(toolsHead);
+    const row = document.createElement('div');
+    row.className = 'build-tools-row';
+    const mv = document.createElement('button');
+    mv.className = 'tool-mode';
+    mv.textContent = 'Mover (M)';
+    mv.addEventListener('click', () => this.cb.onSelectMove());
+    const rm = document.createElement('button');
+    rm.className = 'tool-mode danger';
+    rm.textContent = 'Demoler (X)';
+    rm.addEventListener('click', () => this.cb.onSelectRemove());
+    row.appendChild(mv);
+    row.appendChild(rm);
+    toolsBox.appendChild(row);
+    sec.appendChild(toolsBox);
+    this.buildToolMoveBtn = mv;
+    this.buildToolRemoveBtn = rm;
+
     let keyIdx = 0;
     for (const cat of TOOL_CATEGORIES) {
       const wrap = document.createElement('div');
@@ -140,10 +180,8 @@ export class Hud {
   }
 
   setDirsToggle(on) {
-    this.el.btnDirs.classList.toggle('selected', Boolean(on));
-    this.el.btnDirs.title = on
-      ? 'Ocultar direcciones de todas las piezas (G)'
-      : 'Mostrar todas las direcciones (G)';
+    this.el.actDirs.classList.toggle('selected', Boolean(on));
+    this.el.actDirs.textContent = on ? 'Ocultar direcciones (G)' : 'Mostrar direcciones (G)';
   }
 
   refreshTooltips() {
@@ -161,11 +199,20 @@ export class Hud {
     for (const [type, card] of this.cards) {
       card.classList.toggle('selected', Boolean(mode && mode.type === type));
     }
-    this.el.btnRemove.classList.toggle('selected', mode === 'remove');
-    this.el.btnMove.classList.toggle(
-      'selected',
-      Boolean(mode === 'move-armed' || (mode && mode.moving)),
-    );
+    if (this.buildToolRemoveBtn) this.buildToolRemoveBtn.classList.toggle('selected', mode === 'remove');
+    if (this.buildToolMoveBtn)
+      this.buildToolMoveBtn.classList.toggle(
+        'selected',
+        Boolean(mode === 'move-armed' || (mode && mode.moving)),
+      );
+  }
+
+  toggleGlobalMenu() {
+    this.el.globalMenu.classList.toggle('hidden');
+  }
+
+  hideGlobalMenu() {
+    this.el.globalMenu.classList.add('hidden');
   }
 
   // ---- cajón lateral (un panel por vez, cerrado por defecto) ----
@@ -319,13 +366,6 @@ export class Hud {
     btn.addEventListener('click', () => this.cb.onLevel());
     box.appendChild(btn);
     sec.appendChild(box);
-    // M1.5-D4 punto 6: "Reiniciar parcela" vivía en la pestaña Ayuda
-    // (eliminada); se muda al panel Edad.
-    const reset = document.createElement('button');
-    reset.className = 'age-buy danger';
-    reset.textContent = 'Reiniciar parcela';
-    reset.addEventListener('click', () => this.cb.onReset());
-    sec.appendChild(reset);
   }
 
   // ---- selección ----

@@ -43,9 +43,10 @@ ok(/JAM_MS/.test(world), 'lógica de atasco usa JAM_MS');
 const floatBody = (css.match(/\.float\s*\{([^}]*)\}/) || [])[1] || '';
 ok(/text-shadow/.test(floatBody), '.float con contorno (text-shadow)');
 
-// 5. sel-panel en el dock, sin absolute
-const dockMatch = html.match(/<footer\b[^>]*id="dock"[^>]*>[\s\S]*?<\/footer>/);
-ok(dockMatch && /id="sel-panel"/.test(dockMatch[0]), '#sel-panel dentro de #dock');
+// 5. sel-panel en el rail izquierdo, sin absolute
+const iRail = html.indexOf('id="left-rail"');
+const iSel = html.indexOf('id="sel-panel"');
+ok(iRail >= 0 && iSel > iRail, '#sel-panel dentro de #left-rail');
 const selBodies = [...css.matchAll(/#sel-panel\s*\{([^}]*)\}/g)].map((m) => m[1]);
 ok(selBodies.length > 0 && !selBodies.some((b) => /position\s*:\s*absolute/.test(b)), '#sel-panel sin absolute');
 

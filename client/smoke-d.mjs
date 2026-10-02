@@ -229,7 +229,7 @@ ok(TOOLS.puente.minH === 1, 'puente exige minH 1');
   ok(hud.cards && hud.cards.size === TOOL_ORDER.length, `Construir arma ${TOOL_ORDER.length} tarjetas (${hud.cards && hud.cards.size})`);
   ok(['rebote', 'union', 'divisor', 'puente'].every((t) => hud.cards.has(t)), 'tarjetas rebote/union/divisor/puente presentes');
   const groups = cache['[data-panel="build"]'].children;
-  ok(groups.length === 4, `menú agrupa en 4 categorías (${groups.length})`);
+  ok(groups.length === 5, `menú agrupa en 5 bloques (Herramientas + 4 categorías) (${groups.length})`);
   hud.openDrawer('build');
   ok(hud.isDrawerOpen(), 'cajón abre en Construir');
   hud.closeDrawer();
