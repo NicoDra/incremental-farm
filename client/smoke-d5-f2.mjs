@@ -1,7 +1,10 @@
 // M1.5-F2 smoke: recetas de dos ingredientes + buffers por entrada.
 import RAPIER from '@dimforge/rapier3d-compat';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { SimWorld } from './src/sim/world.js';
-import { CONVERTER_BUFFER_CAP } from 'chanchos-shared';
+import { CONVERTER_BUFFER_CAP, TOOLS } from 'chanchos-shared';
 
 await RAPIER.init();
 
@@ -22,6 +25,9 @@ function steps(sim, n) {
     sim.step(STEP, now);
   }
 }
+
+const root = dirname(fileURLToPath(import.meta.url));
+
 
 // ---- 1) buffers independientes en Pienso ----
 {
@@ -138,6 +144,85 @@ function steps(sim, n) {
   ok(e.inputBuffers.salt.length === CONVERTER_BUFFER_CAP, 'F2C: salt respeta cap por entrada');
   ok(!!pigOverflow && sim.products.includes(pigOverflow), 'F2C: pig extra queda fuera cuando input está lleno');
   ok(!!saltOverflow && sim.products.includes(saltOverflow), 'F2C: salt extra queda fuera cuando input está lleno');
+}
+
+// ---- 7) una sola entrada: ambos ingredientes entran por atrás ----
+{
+  // la declaración ya no fija lados por ingrediente
+  ok(!TOOLS.pienso.inputSides, 'F2U: pienso sin inputSides (entrada única trasera)');
+  ok(!TOOLS.jamonera_industrial.inputSides, 'F2U: industrial sin inputSides (entrada única trasera)');
+  // oráculo: nave del este llega rodando al norte y entra por la trasera (r0)
+  const sim = new SimWorld();
+  ok(sim.placeTool('jamonera_industrial', 5, 5, 0, 0, 0, now), 'F2U: industrial r0');
+  const e = sim.tools.get(sim.key(5, 5, 0));
+  sim.spawnProduct('salt', e.cx + 0.6, 0.45, e.cz + 0.6, { x: -0.45, y: 0, z: -0.45 });
+  sim.spawnProduct('pig', e.cx + 0.75, 0.45, e.cz + 0.3, { x: -0.45, y: 0, z: -0.45 });
+  steps(sim, 200);
+  ok((e.inputBuffers?.salt?.length || 0) >= 1 || e.pending, 'F2U: sal entra por la trasera compartida');
+  // el cerdo (ancho 0.68) queda apoyado contra el pilar del hueco: pasa el
+  // filtro trasero y entra apenas se libera el pilar — igual que en línea.
+  {
+    const pig = sim.products.find((p) => p.kind === 'pig');
+    ok(!!pig, 'F2U: cerdo apoyado en la boca trasera (no rechazado ni perdido)');
+    if (pig) {
+      const t = pig.body.translation();
+      const backDist = (t.x - e.cx) * -e.dir.x + (t.z - e.cz) * -e.dir.z;
+      ok(backDist >= -0.1, 'F2U: cerdo pasa el filtro trasero (along >= -0.1)');
+    }
+  }
+  {
+    const simB = new SimWorld();
+    ok(simB.placeTool('pienso', 9, 9, 0, 0, 0, now), 'F2U: pienso acepta desde cualquier lado de la boca');
+    const eB = simB.tools.get(simB.key(9, 9, 0));
+    simB.spawnProduct('pumpkin', eB.cx + 0.6, 0.45, eB.cz + 0.6, { x: -0.45, y: 0, z: -0.45 });
+    steps(simB, 200);
+    ok((eB.inputBuffers?.pumpkin?.length || 0) >= 1 || eB.pending, 'F2U: calabaza entra desplazada al este de la boca');
+  }
+  // la trasera está ensanchada (una boca ancha para los dos)
+  ok(e.colWiden === true, 'F2U: boca trasera ensanchada en receta doble');
+}
+
+// ---- 8) sprite industrial: boca de salida dorada, entrada trasera ancha,
+// una flecha teal de entrada ----
+{
+  const meshes = readFileSync(join(root, 'src', 'render', 'toolMeshes.js'), 'utf8');
+  const branch = meshes.slice(
+    meshes.indexOf("type === 'jamonera_industrial'"),
+    meshes.indexOf("type === 'silo'"),
+  );
+  ok(/0\.5,\s*0\.3,\s*0\.12,\s*0,\s*0\.44,\s*-0\.48,\s*GOLD/.test(branch), 'F2U: boca dorada sobresale de la cara frontal (0.48 > pared 0.45)');
+  ok(/0\.3,\s*0\.2,\s*0\.1,\s*0,\s*0\.44,\s*-0\.52,\s*DARK/.test(branch), 'F2U: hueco oscuro sobre la boca dorada, afuera del casco');
+  ok(!/converterInputSides|inputArrowPose/.test(meshes), 'F2U: flechas sin lados por ingrediente');
+}
+
+// ---- 9) circuitos: solo salida + trasera abren; flancos este/oeste cerrados ----
+{
+  const sim = new SimWorld();
+  ok(sim.placeTool('jamonera_industrial', 5, 5, 0, 0, 0, now), 'F2U: industrial r0 (sale N, entra S)');
+  for (const [i, j] of [[5, 4], [6, 5], [5, 6], [4, 5]]) {
+    sim.placeTool('recta', i, j, 0, 0, 0, now);
+  }
+  ok(sim.tools.get(sim.key(5, 4, 0)).opens.S === true, 'F2U: norte abre a la salida');
+  ok(sim.tools.get(sim.key(5, 6, 0)).opens.N === true, 'F2U: sur abre a las entradas');
+  ok(sim.tools.get(sim.key(6, 5, 0)).opens.W === false, 'F2U: este flanco cerrado');
+  ok(sim.tools.get(sim.key(4, 5, 0)).opens.E === false, 'F2U: oeste flanco cerrado');
+  // pienso igual
+  const sim2 = new SimWorld();
+  ok(sim2.placeTool('pienso', 5, 5, 0, 2, 0, now), 'F2U: pienso r2 (sale E, entra O)');
+  for (const [i, j] of [[5, 4], [6, 5], [5, 6], [4, 5]]) {
+    sim2.placeTool('recta', i, j, 0, 0, 0, now);
+  }
+  ok(sim2.tools.get(sim2.key(6, 5, 0)).opens.W === true, 'F2U: este abre a la salida r2');
+  ok(sim2.tools.get(sim2.key(4, 5, 0)).opens.E === true, 'F2U: oeste abre a las entradas r2');
+  ok(sim2.tools.get(sim2.key(5, 4, 0)).opens.S === false, 'F2U: norte flanco r2 cerrado');
+  ok(sim2.tools.get(sim2.key(5, 6, 0)).opens.N === false, 'F2U: sur flanco r2 cerrado');
+}
+
+{
+  const shared = readFileSync(join(root, '..', 'shared', 'src', 'index.js'), 'utf8');
+  const hud = readFileSync(join(root, 'src', 'ui', 'hud.js'), 'utf8');
+  ok(!/sal por la derecha|calabaza por la derecha/.test(shared), 'F2U: hints sin lados (ambos por atrás)');
+  ok(!/Entradas:.*derecha/.test(hud), 'F2U: panel sin lados por ingrediente');
 }
 
 console.log(`\nSMOKE-D5-F2 PASS (${pass} checks)`);

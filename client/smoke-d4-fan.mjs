@@ -5,7 +5,7 @@
 // node smoke-d4-fan.mjs  → sale 0 si todo pasa.
 import RAPIER from '@dimforge/rapier3d-compat';
 import { SimWorld } from './src/sim/world.js';
-import { fanTierInfo } from 'chanchos-shared';
+import { fanTierInfo, fanConeParams } from 'chanchos-shared';
 
 await RAPIER.init();
 
@@ -112,6 +112,66 @@ function northOf(sim, p) {
   steps(sim, 90);
   const moved = northOf(sim, p) - before;
   ok(moved > 0.3, `fan N0 empuja producto del suelo (Δ=${moved.toFixed(2)})`);
+}
+
+// ---- 7. M1.5-G: cono visual = física en 8 dirs, con pitch, potencias y alcances ----
+// El render (showSelectionCone/fantasma) y la física (fanParams) llaman al
+// mismo fanConeParams con los mismos ajustes: se replica acá el camino visual
+// y se compara contra sim.fanParams.
+{
+  const sim = new SimWorld();
+  sim.setModifiers({ fanRangeBonus: 0.6 });
+  ok(sim.placeTool('fan', 8, 8, 1, 0, 0, now), 'cono: fan N1');
+  const e = sim.tools.get(sim.key(8, 8, 1));
+  const DIRS8L = [
+    { x: 0, z: -1 }, { x: 0.7071, z: -0.7071 }, { x: 1, z: 0 }, { x: 0.7071, z: 0.7071 },
+    { x: 0, z: 1 }, { x: -0.7071, z: 0.7071 }, { x: -1, z: 0 }, { x: -0.7071, z: -0.7071 },
+  ];
+  for (let r = 0; r < 8; r++) {
+    for (const pitch of [0, 45]) {
+      for (const powerPct of [25, 100]) {
+        for (const rangeCells of [null, 2]) {
+          e.rot8 = r;
+          e.dir = DIRS8L[r];
+          e.pitchDeg = pitch;
+          sim.setFanTune(e, { powerPct, rangeCells });
+          const phys = sim.fanParams(e);
+          // camino visual: mismo fanConeParams con mismos ajustes
+          const cp = Math.cos((pitch * Math.PI) / 180);
+          const vis = fanConeParams({
+            fanTier: e.fanTier,
+            dir: { x: DIRS8L[r].x, z: DIRS8L[r].z },
+            pitchDeg: pitch,
+            cx: e.cx,
+            cy: e.baseY,
+            cz: e.cz,
+            rangeBonus: 0.6,
+            powerPct,
+            rangeCells,
+          });
+          void cp;
+          ok(
+            Math.abs(vis.force - phys.force) < 1e-9 && Math.abs(vis.range - phys.range) < 1e-9,
+            `cono r${r} pitch${pitch} ${powerPct}% ${rangeCells === null ? 'máx' : rangeCells}: visual=física (F=${phys.force.toFixed(3)}, R=${phys.range.toFixed(2)})`,
+          );
+          ok(
+            // tolerancia 1e-4: DIRS8 guarda 0.7071 (4 decimales), la física
+            // lo normaliza a unidad exacta; misma fuente, distinto redondeo.
+            Math.abs(vis.direction.x - phys.direction.x) < 1e-4 &&
+              Math.abs(vis.direction.z - phys.direction.z) < 1e-4,
+            `cono r${r} pitch${pitch}: misma dirección`,
+          );
+        }
+      }
+    }
+  }
+  // efectivos: 25 % = 1/4 del máximo; alcance 2 recorta; null = máximo+bonus
+  sim.setFanTune(e, { powerPct: 25, rangeCells: null });
+  const p25 = sim.fanParams(e);
+  ok(Math.abs(p25.force - p25.maxForce / 4) < 1e-9, 'cono: 25 % = 1/4 del máximo del tier');
+  ok(Math.abs(p25.range - p25.maxRange) < 1e-9, 'cono: null = máximo con bonus');
+  sim.setFanTune(e, { rangeCells: 2 });
+  ok(Math.abs(sim.fanParams(e).range - 2) < 1e-9, 'cono: alcance elegido recorta');
 }
 
 console.log(`\nSMOKE-D4-FAN PASS (${pass} checks)`);

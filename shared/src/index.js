@@ -101,15 +101,14 @@ export const TOOLS = {
     interval: 5200,
     hint: 'Emite sal industrial por la boca frontal.',
   },
-  pienso: {
-    name: 'Planta de Pienso',
-    base: 120,
+    pienso: {
+      name: 'Planta de Mezcla',
+      base: 120,
     kind: 'converter',
     inputs: ['corn', 'pumpkin'],
-    inputSides: { corn: 'back', pumpkin: 'right' },
     output: 'feed',
     time: 3200,
-    hint: 'Mezcla choclo+calabaza: 1+1 → pienso.',
+    hint: 'Mezcla choclo+calabaza: 1+1 → pienso. Ambos entran por atrás (choclo y calabaza, cualquier lado de la boca).',
   },
   corral: {
     name: 'Corral Ejecutivo',
@@ -138,15 +137,20 @@ export const TOOLS = {
     time: 4000,
     hint: 'Traga cerditos por atrás, escupe jamón.',
   },
-  jamonera_industrial: {
-    name: 'Jamonera Industrial+',
-    base: 260,
+    jamonera_industrial: {
+      name: 'Curadora de Jambros',
+      base: 260,
     kind: 'converter',
     inputs: ['pig', 'salt'],
-    inputSides: { pig: 'back', salt: 'right' },
     output: 'ham',
     time: 4600,
-    hint: 'Receta premium: cerdo+sal para curado industrial.',
+    hint: 'Receta premium: cerdo+sal para curado industrial. Ambos entran por atrás (cerdo y sal, cualquier lado de la boca).',
+  },
+  silo: {
+    name: 'Silo Amortiguador',
+    base: 70,
+    kind: 'silo',
+    hint: 'Depósito en línea: entra por atrás, suelta 1 por vez al frente a ritmo fijo. Si la boca queda pegada a otra máquina, poné una canaleta entre medio.',
   },
 };
 
@@ -168,6 +172,7 @@ export const TOOL_ORDER = [
   'palomitera',
   'jamonera',
   'jamonera_industrial',
+  'silo',
 ];
 
 // Categorías del menú "Construir".
@@ -175,7 +180,7 @@ export const TOOL_CATEGORIES = [
   { id: 'path', name: 'Caminos', tools: ['recta', 'curva', 'rampa', 'embudo', 'rebote', 'union', 'divisor', 'puente'] },
   { id: 'fan', name: 'Ventiladores', tools: ['fan'] },
   { id: 'emitter', name: 'Emisores', tools: ['sembrador', 'calabacera', 'salinera'] },
-  { id: 'processor', name: 'Procesadores', tools: ['pienso', 'corral', 'palomitera', 'jamonera', 'jamonera_industrial'] },
+  { id: 'processor', name: 'Procesadores', tools: ['pienso', 'corral', 'palomitera', 'jamonera', 'jamonera_industrial', 'silo'] },
 ];
 
 // 8 direcciones horizontales (rot8). Índices pares = N, E, S, O (piezas de 4 dirs).
@@ -289,12 +294,10 @@ export function isChannelType(type) {
   return TOOLS[type]?.kind === 'channel';
 }
 
+// M1.5-F2 simplificado: una receta doble = una boca trasera compartida
+// (los dos ingredientes entran por atrás; buffers separados por tipo dentro).
 function converterInputWorldDirs(toolDef, rot8) {
-  if (!toolDef || toolDef.kind !== 'converter') return [];
-  if (toolDef.inputSides && typeof toolDef.inputSides === 'object') {
-    const sides = [...new Set(Object.values(toolDef.inputSides))].filter(Boolean);
-    return sides.map((s) => localSideToWorldDir(rot8, s));
-  }
+  if (!toolDef || (toolDef.kind !== 'converter' && toolDef.kind !== 'silo')) return [];
   return [localSideToWorldDir(rot8, 'back')];
 }
 
@@ -310,7 +313,7 @@ function converterInputWorldDirs(toolDef, rot8) {
 //    abre siempre, salvo pared muerta (DEAD_SIDES) que exige OPEN_BACKS.
 //    Un flanco/pared que no es boca nunca inicia: la mera cercanía no abre.
 //  - canal↔máquina: abre la cara hacia la boca de SALIDA (y hacia la boca de
-//    ENTRADA de conversores); cualquier otra cara queda CERRADA (flanco).
+//    ENTRADA de conversores y del silo); cualquier otra cara queda CERRADA (flanco).
 //  - pieza colocada con Shift (noAutoConnect): se salta del emparejamiento;
 //    conserva solo sus aperturas por defecto.
 export function computeLevelOpenings(pieces) {
@@ -346,9 +349,11 @@ export function computeLevelOpenings(pieces) {
           if (!dDead || OPEN_BACKS) open.add(d);
           if (!nDead || OPEN_BACKS) nOpen.add(od);
         }
-      } else if (TOOLS[n.type]?.kind === 'producer' || TOOLS[n.type]?.kind === 'converter') {
+      } else if (['producer', 'converter', 'silo'].includes(TOOLS[n.type]?.kind)) {
         const outW = localSideToWorldDir(n.rot8, 'front');
-        const inWs = TOOLS[n.type].kind === 'converter' ? converterInputWorldDirs(TOOLS[n.type], n.rot8) : [];
+        const inWs = ['converter', 'silo'].includes(TOOLS[n.type].kind)
+          ? converterInputWorldDirs(TOOLS[n.type], n.rot8)
+          : [];
         if (od === outW || inWs.includes(od)) open.add(d);
         else open.delete(d); // flanco de la máquina: pared forzada
       }
@@ -373,6 +378,117 @@ export const FAN_TIERS = [
 ];
 export const FAN = FAN_TIERS[0];
 export const FAN_TIER_COLORS = ['#4a9e94', '#7fae4a', '#8a8f98', '#c9a13b'];
+
+// ---- M1.5-F2: física canónica de productos + alcance del ventilador ----
+// Fuente única (cliente y servidor futuro): media caja, densidad, restitución.
+// La masa sale de volumen × densidad (volumen = 8*hx*hy*hz).
+export const PRODUCT_PHYS = {
+  corn: { half: [0.16, 0.16, 0.16], density: 0.8, restitution: 0.3 },
+  pumpkin: { half: [0.24, 0.24, 0.24], density: 1.0, restitution: 0.25 },
+  salt: { half: [0.13, 0.13, 0.13], density: 1.1, restitution: 0.2 },
+  feed: { half: [0.2, 0.18, 0.2], density: 0.9, restitution: 0.24 },
+  popcorn: { half: [0.1, 0.1, 0.1], density: 0.6, restitution: 0.5 },
+  pig: { half: [0.26, 0.17, 0.34], density: 1.2, restitution: 0.3 },
+  ham: { half: [0.2, 0.14, 0.24], density: 1.2, restitution: 0.25 },
+};
+
+export function productMass(kind) {
+  const p = PRODUCT_PHYS[kind];
+  if (!p) return Infinity;
+  return 8 * p.half[0] * p.half[1] * p.half[2] * p.density;
+}
+
+// Productos que el ventilador puede empujar (la sal está incluida).
+export const FAN_PUSHABLE_PRODUCTS = ['corn', 'pumpkin', 'salt', 'feed', 'popcorn', 'pig', 'ham'];
+
+// Masa máxima que mueve cada tier (Barro/Madera/Piedra/Fábrica).
+// La sal (~0.019) queda dentro del rango desde el tier 0, igual que el
+// maíz (~0.026) y la calabaza (~0.111); solo el cerdo (~0.144) exige tier 1+.
+export const FAN_MAX_PUSH_MASS_BY_TIER = [0.13, 0.22, 0.35, 0.6];
+
+export function fanCanPush(kind, tier) {
+  return fanMovesProduct(kind, tier, FAN_POWER_DEFAULT);
+}
+
+// ---- M1.5-G: ajuste de potencia y alcance del ventilador ----
+// Principio: los ajustes SOLO REDUCEN desde un máximo ya ganado.
+// - Potencia máxima = tier (época). Pasos % del máximo, default 100 %.
+//   Se guarda como porcentaje: al subir de tier se conserva.
+// - Alcance máximo = tier + mejora "alcance" comprada. null = máximo
+//   (sigue la mejora); entero = celdas elegidas, siempre recortado al máximo.
+export const FAN_POWER_STEPS = [25, 50, 75, 100];
+export const FAN_POWER_DEFAULT = 100;
+// Aceleración mínima (fuerza/masa) para contar como "mueve". A 100 % nunca
+// limita frente a la tabla de masas (peor caso: cerdo en tier 0 ≈ 1.73).
+export const FAN_MOVE_MIN_ACCEL = 1.0;
+// Productos que muestra el panel del ventilador (mismo orden siempre).
+export const FAN_PANEL_PRODUCTS = ['salt', 'corn', 'pumpkin', 'popcorn', 'pig', 'ham'];
+
+function clampTier(tier) {
+  return Math.max(0, Math.min(Number.isFinite(tier) ? tier : 0, FAN_TIERS.length - 1));
+}
+
+export function fanMaxForce(tier) {
+  return fanTierInfo(tier).force;
+}
+
+export function fanEffectiveForce(tier, powerPct = FAN_POWER_DEFAULT) {
+  const pct = Math.max(0, Math.min(Number.isFinite(powerPct) ? powerPct : FAN_POWER_DEFAULT, 100));
+  return fanMaxForce(tier) * (pct / 100);
+}
+
+export function fanMaxRange(tier, rangeBonus = 0) {
+  return fanTierInfo(tier).range + (Number.isFinite(rangeBonus) ? rangeBonus : 0);
+}
+
+export function fanEffectiveRange(tier, rangeBonus = 0, rangeCells = null) {
+  const max = fanMaxRange(tier, rangeBonus);
+  if (rangeCells === null || rangeCells === undefined) return max;
+  const want = Math.floor(Number(rangeCells));
+  if (!Number.isFinite(want)) return max;
+  return Math.max(1, Math.min(want, max));
+}
+
+// Misma lógica para física y panel: registrado + en rango de masa del tier
+// + aceleración efectiva sobre el umbral.
+export function fanMovesProduct(kind, tier, powerPct = FAN_POWER_DEFAULT) {
+  if (!FAN_PUSHABLE_PRODUCTS.includes(kind)) return false;
+  const t = clampTier(tier);
+  if (productMass(kind) > FAN_MAX_PUSH_MASS_BY_TIER[t]) return false;
+  return fanEffectiveForce(t, powerPct) / productMass(kind) >= FAN_MOVE_MIN_ACCEL;
+}
+
+// Normaliza un ajuste {powerPct, rangeCells} a pasos enteros válidos.
+// La potencia ajusta al paso más cercano; el alcance queda entero ≥ 1 o null
+// (el recorte al máximo vigente lo hace fanEffectiveRange al usar).
+export function normalizeFanTune(tune) {
+  const t = tune || {};
+  let powerPct = FAN_POWER_DEFAULT;
+  if (Number.isFinite(Number(t.powerPct))) {
+    const p = Number(t.powerPct);
+    powerPct = FAN_POWER_STEPS.reduce((a, b) => (Math.abs(b - p) < Math.abs(a - p) ? b : a));
+  }
+  let rangeCells = null;
+  if (t.rangeCells !== null && t.rangeCells !== undefined) {
+    const r = Math.floor(Number(t.rangeCells));
+    rangeCells = Number.isFinite(r) ? Math.max(1, r) : null;
+  }
+  return { powerPct, rangeCells };
+}
+
+// Estado serializable del ajuste: enteros pequeños (p = %, r = celdas|null).
+export function serializeFanTune(entry) {
+  const n = normalizeFanTune({ powerPct: entry?.powerPct, rangeCells: entry?.rangeCells });
+  return { p: n.powerPct, r: n.rangeCells };
+}
+
+export function parseFanTune(json) {
+  if (!json || typeof json !== 'object') return null;
+  if (!Number.isFinite(Number(json.p)) || (json.r !== null && !Number.isFinite(Number(json.r)))) {
+    return null;
+  }
+  return normalizeFanTune({ powerPct: Number(json.p), rangeCells: json.r === null ? null : Number(json.r) });
+}
 
 // Física de suelo y canaletas (M1.5-D3): el suelo frena más que cualquier
 // canaleta; las canaletas mejoran por edad/tier.
@@ -408,10 +524,12 @@ export function channelSurfaceForAge(age, isBounce = false) {
 }
 
 // Fuente única de verdad del cono del ventilador (física + render).
-// Input esperado: { rot8|dir, pitchDeg, fanTier, cx|x, cy|y, cz|z, rangeBonus }.
+// Input esperado: { rot8|dir, pitchDeg, fanTier, cx|x, cy|y, cz|z,
+//   rangeBonus, powerPct (default 100), rangeCells (default null = máximo) }.
 export function fanConeParams(fan) {
   const f = fan || {};
   const tier = fanTierInfo(f.fanTier ?? f.tier ?? 0);
+  const tierIdx = FAN_TIERS.indexOf(tier);
   const rot8 = snapRot8('fan', f.rot8 ?? 0);
   const dir = f.dir || DIRS8[rot8];
   const pitchDeg = Number.isFinite(f.pitchDeg) ? f.pitchDeg : 0;
@@ -422,7 +540,13 @@ export function fanConeParams(fan) {
     y: Math.sin(pitchRad),
     z: dir.z * cp,
   };
-  const range = tier.range + (Number.isFinite(f.rangeBonus) ? f.rangeBonus : 0);
+  // M1.5-G: potencia y alcance efectivos (solo reducen desde los máximos).
+  const tune = normalizeFanTune({ powerPct: f.powerPct, rangeCells: f.rangeCells });
+  const rangeBonus = Number.isFinite(f.rangeBonus) ? f.rangeBonus : 0;
+  const maxRange = fanMaxRange(tierIdx, rangeBonus);
+  const range = fanEffectiveRange(tierIdx, rangeBonus, tune.rangeCells);
+  const maxForce = fanMaxForce(tierIdx);
+  const force = fanEffectiveForce(tierIdx, tune.powerPct);
   const halfAngleTan = tier.halfAngleTan;
   const halfAngleDeg = (Math.atan(halfAngleTan) * 180) / Math.PI;
   const cy = Number.isFinite(f.cy) ? f.cy : Number.isFinite(f.y) ? f.y : 0;
@@ -441,8 +565,14 @@ export function fanConeParams(fan) {
     // de SU nivel (no del nivel de arriba ni del de abajo).
     yMin: cy - 0.4,
     yMax: cy + 0.9,
-    fanTier: FAN_TIERS.indexOf(tier),
-    force: tier.force,
+    fanTier: tierIdx,
+    force,
+    // M1.5-G: efectivos + máximos para panel actual/máximo.
+    powerPct: tune.powerPct,
+    rangeCells: tune.rangeCells,
+    rangeBonus,
+    maxForce,
+    maxRange,
   };
 }
 
@@ -473,7 +603,7 @@ export const AGES = [
   },
   {
     id: 1, name: 'Madera', fanTier: 1,
-    tools: ['recta', 'curva', 'rampa', 'embudo', 'union', 'divisor', 'puente', 'fan', 'sembrador', 'calabacera', 'palomitera'],
+    tools: ['recta', 'curva', 'rampa', 'embudo', 'union', 'divisor', 'puente', 'fan', 'sembrador', 'calabacera', 'palomitera', 'silo'],
     products: ['corn', 'pumpkin', 'popcorn'],
     desc: 'Palomitera + piezas de conexión (unión, divisor, puente) + ventilador tier 2. Calabaza.',
   },
@@ -529,6 +659,8 @@ export const UPGRADE_LINES = {
   jamon_vel: { obj: 'jamonera', name: 'Jamonera: velocidad', max: 5, base: 100, growth: 1.8, age: 3, desc: '-15% tiempo de curado por nivel.' },
   jamon_curado: { obj: 'jamonera', name: 'Jamonera: curado', max: 5, base: 120, growth: 1.5, age: 3, desc: '+20% valor jamón por nivel.' },
   jamon_mult: { obj: 'jamonera', name: 'Jamonera: multiplicador', max: 5, base: 200, growth: 1.5, age: 3, desc: '+8% ingresos globales por nivel.' },
+  silo_cap: { obj: 'silo', name: 'Silo: capacidad', max: 5, base: 80, growth: 1.5, age: 1, desc: '+4 capacidad total por nivel.' },
+  silo_vel: { obj: 'silo', name: 'Silo: velocidad de salida', max: 5, base: 90, growth: 1.8, age: 1, desc: '-15% intervalo de salida por nivel.' },
   fan_alcance: { obj: 'fan', name: 'Ventilador: alcance', max: 5, base: 50, growth: 1.5, age: 0, desc: '+0.6 celdas de alcance por nivel.' },
   fan_modo: { obj: 'fan', name: 'Ventilador: modo', max: 2, base: 150, growth: 1.5, age: 1, desc: 'Nv1 pulsos (ráfagas), nv2 giratorio (barre ±40°).' },
   portal_valor: { obj: 'portal', name: 'Portal: valor', max: 5, base: 80, growth: 1.5, age: 0, desc: '+12% valor de entrega por nivel.' },
@@ -573,6 +705,13 @@ export const SPEED_LIMIT = MAX_PRODUCT_SPEED; // alias: código existente
 // paso, antes de que la física lo expulse (ver updateConverters, doble pasada).
 export const CONVERTER_ACCEPT_SPEED = EMIT_IMPULSE + 0.1;
 export const CONVERTER_BUFFER_CAP = 3;
+
+// M1.5-F4: Silo, depósito en línea. Guarda contadores por tipo (sin cuerpo
+// físico) y suelta 1 por intervalo, alternando tipos, solo con boca libre.
+export const SILO_CAP = 10; // capacidad total base (unidades)
+export const SILO_CAP_PER_LEVEL = 4; // +capacidad por nivel de mejora silo_cap
+export const SILO_INTERVAL_MS = 1200; // ritmo base de salida (1 producto cada X)
+export const SILO_MOUTH_CLEAR_R = 0.6; // radio libre exigido en la boca de salida
 
 export function comboMult(steps) {
   return Math.min(1 + steps * COMBO.step, COMBO.max);

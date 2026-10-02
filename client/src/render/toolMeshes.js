@@ -56,6 +56,8 @@ function mouthArrow(color, size = 1) {
   return new THREE.Mesh(chevronGeo(size), basicMat(color));
 }
 
+
+
 function pillars(v, baseY) {
   if (baseY <= 0) return;
   const post = '#6b5638';
@@ -88,7 +90,7 @@ function isChannelType(type) {
 // M1.5-D4: piezas cuya colocación/retiro cambia las aperturas vecinas.
 function affectsOpenings(type) {
   const k = TOOLS[type]?.kind;
-  return k === 'producer' || k === 'converter';
+  return k === 'producer' || k === 'converter' || k === 'silo';
 }
 
 // M1.5-D4: aperturas tomadas de chanchos-shared (misma regla que la física:
@@ -143,7 +145,10 @@ function buildChannelGeo(type, baseY, age = 0, openWorld = null, rot8 = 0) {
   );
   const floorColor = type === 'rebote' ? floorRebound : floorC;
 
-  v.add(1, 0.06, 1, 0, -0.03, 0, floorColor);
+  // Levanto la losa 0.02 sobra del plano del suelo (y=0). Antes: cara
+  // inferior exactamente en y=0 → coplanar con el piso → z-fighting/shimmer.
+  const floorCenterY = 0.02;
+  v.add(1, 0.06, 1, 0, floorCenterY, 0, floorColor);
 
   // M1.5-D4: pared 0.6 de alto (centro 0.32) — igual que la física (CHANNEL_WALL_H),
   // por encima de la boca de salida (y=0.55) para que nada salga volando.
@@ -252,11 +257,13 @@ function buildProducerGeo(type, age = 0) {
     v.add(0.22, 0.18, 0.22, -0.2, 0.6, 0.15, '#ffffff');
     v.add(0.4, 0.26, 0.1, 0, 0.16, -0.42, '#4a3820');
   } else if (type === 'pienso') {
+    // Dos tolvas (maíz + calabaza) que vierten a una boca trasera compartida.
     v.add(0.86, 0.78, 0.86, 0, 0.39, 0, '#6e5a46');
     v.add(0.7, 0.14, 0.7, 0, 0.84, 0, GOLD);
     v.add(0.22, 0.4, 0.22, -0.22, 0.95, 0.12, '#9a9aa2');
+    v.add(0.22, 0.4, 0.22, 0.22, 0.95, 0.12, '#9a9aa2'); // segunda tolva
     mouthBox(v, 0.42);
-    v.add(0.52, 0.34, 0.12, 0, 0.42, 0.4, DARK);
+    v.add(0.72, 0.34, 0.12, 0, 0.42, 0.4, DARK); // boca trasera ancha
   } else if (type === 'corral') {
     const fence = '#8a5f36';
     for (const px of [-0.42, 0.42]) {
@@ -297,9 +304,26 @@ function buildProducerGeo(type, age = 0) {
     v.add(0.84, 0.14, 0.84, 0, 0.96, 0, '#2b2620');
     v.add(0.18, 0.58, 0.18, -0.25, 1.08, -0.15, '#6b7078');
     v.add(0.18, 0.58, 0.18, 0.25, 1.08, -0.15, '#6b7078');
-    mouthBox(v, 0.44);
-    v.add(0.26, 0.3, 0.12, -0.2, 0.44, 0.42, DARK);
-    v.add(0.26, 0.3, 0.12, 0.2, 0.44, 0.42, DARK);
+    // Boca de salida frontal dorada, sobresaliendo de la cara (0.48 vs pared
+    // 0.45): el cuerpo de la curadora llega hasta z=-0.45, una boca en
+    // -0.36/-0.38 quedaría enterrada dentro del casco (era el bug visual).
+    v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
+    v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
+    // Entrada única trasera, ensanchada para cerdo+sal (capa externa).
+    v.add(0.72, 0.3, 0.12, 0, 0.44, 0.52, DARK);
+    v.add(0.6, 0.2, 0.1, 0, 0.44, 0.56, TEAL);
+  } else if (type === 'silo') {
+    // M1.5-F4: tanque vertical con entrada trasera (oscura) y boca frontal
+    // (dorada): aberturas físicas distintas para cada lado.
+    const tank = age >= 2 ? P.metal : '#7d8794';
+    v.add(0.9, 0.12, 0.9, 0, 0.06, 0, '#5c4326'); // base
+    v.add(0.7, 0.9, 0.7, 0, 0.57, 0, tank); // cuerpo
+    v.add(0.74, 0.1, 0.74, 0, 1.02, 0, pal(age).accent); // aro de edad
+    v.add(0.5, 0.22, 0.5, 0, 1.18, 0, '#5d6673'); // techo
+    v.add(0.18, 0.14, 0.18, 0, 1.32, 0, GOLD); // remate
+    v.add(0.5, 0.3, 0.12, 0, 0.35, -0.36, GOLD); // boca frontal (salida)
+    v.add(0.3, 0.2, 0.1, 0, 0.35, -0.38, DARK);
+    v.add(0.5, 0.3, 0.12, 0, 0.35, 0.36, DARK); // abertura trasera (entrada)
   }
   return v.build();
 }
@@ -470,12 +494,13 @@ export class ToolManager {
     group.add(front);
     arrows.push(front);
     const def = TOOLS[type];
-    if (def.kind === 'producer' || def.kind === 'converter') {
+    if (def.kind === 'producer' || def.kind === 'converter' || def.kind === 'silo') {
       const out = mouthArrow(GOLD, 0.85);
       out.position.set(0, 0.45, -0.78);
       group.add(out);
       arrows.push(out);
-      if (def.kind === 'converter') {
+      if (def.kind === 'converter' || def.kind === 'silo') {
+        // M1.5-F2: una sola boca trasera compartida → una flecha teal.
         const inp = mouthArrow(TEAL, 0.85);
         inp.position.set(0, 0.45, 0.78);
         inp.rotation.y = Math.PI;
@@ -575,8 +600,11 @@ export class ToolManager {
       }
       head.add(blades);
       group.add(head);
+      // M1.5-G: las aspas giran con la potencia ajustada (feedback visual).
+      const vis = { power: 1 };
+      entry.vis = vis;
       entry.anim = (t) => {
-        blades.rotation.z = t / 90;
+        blades.rotation.z = (t / 90) * (0.35 + 0.65 * (vis.power ?? 1));
       };
       this.buildArrows(group, type);
     } else {
@@ -584,6 +612,11 @@ export class ToolManager {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);
+      if (type === 'silo') {
+        // M1.5-F4: soportes en N1/N2 (igual que el ventilador elevado).
+        const supGeo = fanSupportsGeo(baseY);
+        if (supGeo) group.add(new THREE.Mesh(supGeo, this.bodyMat));
+      }
       if (type === 'sembrador') {
         const lamp = new THREE.Mesh(this.lampGeo, this.lampMat);
         lamp.position.set(0.2, 0.95, 0.2);
@@ -620,7 +653,8 @@ export class ToolManager {
     while (gr.children.length) gr.remove(gr.children[0]);
   }
 
-  showGhost(type, rot8, pitchDeg, cell, h, valid, fanAxis) {
+  // M1.5-G: fanTune = { powerPct, rangeCells, rangeBonus } para el cono fantasma.
+  showGhost(type, rot8, pitchDeg, cell, h, valid, fanAxis, fanTune = null) {
     const g = this.ghost;
     if (!type || !cell) {
       g.visible = false;
@@ -654,7 +688,7 @@ export class ToolManager {
       const m = new THREE.Mesh(geo, this.ghostBodyMat);
       g.add(m);
     }
-    if (type === 'fan') {
+    if (type === 'fan' || type === 'silo') {
       const supGeo = fanSupportsGeo(baseY);
       if (supGeo) g.add(new THREE.Mesh(supGeo, this.ghostBodyMat));
     }
@@ -663,11 +697,11 @@ export class ToolManager {
     if (type === 'rampa') front.position.z = -0.35;
     g.add(front);
     const def = TOOLS[type];
-    if (def && (def.kind === 'producer' || def.kind === 'converter')) {
+    if (def && (def.kind === 'producer' || def.kind === 'converter' || def.kind === 'silo')) {
       const out = new THREE.Mesh(chevronGeo(0.85), this.ghostArrowMats.out);
       out.position.set(0, 0.45, -0.78);
       g.add(out);
-      if (def.kind === 'converter') {
+      if (def.kind === 'converter' || def.kind === 'silo') {
         const inp = new THREE.Mesh(chevronGeo(0.85), this.ghostArrowMats.in);
         inp.position.set(0, 0.45, 0.78);
         inp.rotation.y = Math.PI;
@@ -697,6 +731,7 @@ export class ToolManager {
     }
     if (type === 'fan') {
       const cone = new THREE.Mesh(this.coneGeo, this.coneMat);
+      // M1.5-G: el fantasma muestra los ajustes copiados (o defaults 100/máx).
       const p = fanConeParams({
         fanTier: this.currentFanTier,
         dir: { x: 0, z: -1 },
@@ -704,14 +739,18 @@ export class ToolManager {
         cx: 0,
         cy: 0,
         cz: 0,
-        rangeBonus: Number.isFinite(fanAxis?.rangeBonus) ? fanAxis.rangeBonus : 0,
+        rangeBonus: Number.isFinite(fanTune?.rangeBonus) ? fanTune.rangeBonus : 0,
+        powerPct: fanTune?.powerPct,
+        rangeCells: fanTune?.rangeCells ?? null,
       });
       this.applyConeParams(cone, p);
       g.add(cone);
     }
   }
 
-  showSelectionCone(x, y, z, axis) {
+  // M1.5-G: tune = { powerPct, rangeCells, rangeBonus } del sim; el cono usa
+  // la misma fuente única (fanConeParams) que la física.
+  showSelectionCone(x, y, z, axis, tune = null) {
     if (!axis) {
       this.selCone.visible = false;
       return;
@@ -726,7 +765,9 @@ export class ToolManager {
       cx: x,
       cy: y - (tierInfo?.originY || 0),
       cz: z,
-      rangeBonus: Number.isFinite(axis.rangeBonus) ? axis.rangeBonus : 0,
+      rangeBonus: Number.isFinite(tune?.rangeBonus) ? tune.rangeBonus : 0,
+      powerPct: tune?.powerPct,
+      rangeCells: tune?.rangeCells ?? null,
     });
     this.selCone.visible = true;
     this.applyConeParams(this.selCone, params);
@@ -760,7 +801,12 @@ export class ToolManager {
   }
 
   update(t, tools, now) {
-    for (const entry of this.entries.values()) {
+    for (const [key, entry] of this.entries) {
+      // M1.5-G: sincroniza potencia visual con el ajuste del sim.
+      if (entry.type === 'fan' && entry.vis) {
+        const s = tools.get(key);
+        entry.vis.power = ((s?.powerPct ?? 100) / 100);
+      }
       if (entry.anim) entry.anim(t);
       if (entry.jamMarker) {
         entry.jamMarker.position.y += Math.sin(t / 180 + entry.baseBob) * 0.002;

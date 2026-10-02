@@ -20,6 +20,9 @@ import {
   HAM_GLOBAL_PER_UNIT,
   REFUND_RATE_CLAY,
   REFUND_RATE_POST_CLAY,
+  SILO_CAP,
+  SILO_CAP_PER_LEVEL,
+  SILO_INTERVAL_MS,
 } from 'chanchos-shared';
 
 // M1.5-C: zona jugable por edad (rect inclusivo en celdas 0..15).
@@ -292,6 +295,9 @@ export class GameState {
       corralDoubleChance: u('corral_camada') * 0.15,
       jamoneraTimeMs: 4000 * Math.pow(0.85, u('jamon_vel')),
       jamoneraValueMult: 1 + u('jamon_curado') * 0.2,
+      // silo: capacidad total + ritmo de salida
+      siloCap: SILO_CAP + u('silo_cap') * SILO_CAP_PER_LEVEL,
+      siloIntervalMs: SILO_INTERVAL_MS * Math.pow(0.85, u('silo_vel')),
       // fan: tier por edad + líneas fuerza/alcance/modo
       fanTier: this.fanTier(),
       fanRangeBonus: u('fan_alcance') * 0.6,

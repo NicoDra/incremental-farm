@@ -13,6 +13,11 @@ import {
   DIR_NAMES,
   LEVEL_H,
   CONVERTER_BUFFER_CAP,
+  SILO_CAP,
+  SILO_INTERVAL_MS,
+  FAN_POWER_STEPS,
+  FAN_PANEL_PRODUCTS,
+  fanMovesProduct,
   formatMoney,
   toolCost,
   snapRot8,
@@ -128,6 +133,8 @@ async function boot() {
     onSellSelected: () => sellSelected(),
     onUpgradeSelected: () => upgradeSelectedInPlace(),
     onPauseToggle: () => togglePauseSelected(),
+    onFanPower: () => cycleFanTune('power'),
+    onFanRange: () => cycleFanTune('range'),
     onSellGround: () => sellAllGround(),
     onCloseSelection: () => setSelectionFromEntry(null),
   });
@@ -146,7 +153,13 @@ async function boot() {
     else if (mode === 'remove') piece = `Demoler (devuelve ${Math.round(state.refundRate() * 100)}%)`;
     else if (mode === 'move-armed') piece = 'Mover (gratis)';
     else if (mode && mode.moving) piece = `Moviendo ${TOOLS[mode.moving.type].name} (gratis)`;
-    hud.setConfig(`Pieza: ${piece} · Frente: ${dirName} · Altura: N${height} · Vent: ${pitchDeg}°`);
+    let cfg = `Pieza: ${piece} · Frente: ${dirName} · Altura: N${height} · Vent: ${pitchDeg}°`;
+    // M1.5-F4: aviso en preview si la boca del silo quedaría pegada a una máquina.
+    if (mode && mode.type === 'silo' && hoverCell) {
+      const mc = siloMouthComplaint(hoverCell, height, rot8);
+      if (mc) cfg += ` · ⚠ ${mc}`;
+    }
+    hud.setConfig(cfg);
     // M1.5-D: mientras se coloca/demuele, el clic izquierdo barre celdas en vez
     // de girar la cámara (girar: arrastre derecho, medio o WASD).
     const building = Boolean(mode && mode.type) || mode === 'remove';
@@ -213,7 +226,8 @@ async function boot() {
     if (!state.canBuyTool(type)) return false;
     if (!isInRect(i, j, state.allowedRect())) return false;
     // M1.5-D4: el fan vive en cualquier nivel (0/1/2) y respeta celda ocupada.
-    if (type === 'fan') {
+    // M1.5-F4: el silo también (N0/N1/N2 con soportes, igual que el fan).
+    if (type === 'fan' || type === 'silo') {
       if (h < 0 || h > 2) return false;
       if (sim.tools.has(sim.key(i, j, h))) return false;
       if (h === 0 && sim.baseBlocked(i, j)) return false;
@@ -237,14 +251,28 @@ async function boot() {
       fanTier: snapshot.fanTier ?? state.fanTier(),
       age: snapshot.age ?? state.level,
       noAutoConnect: Boolean(snapshot.noAutoConnect),
+      ...tuneOf(snapshot),
     });
     if (!ok) return false;
     toolsR.add(snapshot.type, i, j, h, snapshot.rot8, snapshot.pitchDeg, {
       fanTier: snapshot.fanTier ?? state.fanTier(),
       age: snapshot.age ?? state.level,
       noAutoConnect: Boolean(snapshot.noAutoConnect),
+      ...tuneOf(snapshot),
     });
     return true;
+  }
+
+  // M1.5-F4: la boca del silo no puede nacer dentro del cuerpo sólido de otra
+  // máquina (solapa y expulsa el producto). Aviso en preview + bloqueo simple.
+  function siloMouthComplaint(cell, h, r8) {
+    if (!cell) return '';
+    const d = DIRS8[r8];
+    const t = sim.tools.get(sim.key(cell.i + Math.round(d.x), cell.j + Math.round(d.z), h));
+    if (t && ['producer', 'converter', 'silo'].includes(TOOLS[t.type]?.kind)) {
+      return `Boca pegada a ${TOOLS[t.type].name}: poné una canaleta entre medio.`;
+    }
+    return '';
   }
 
   // Devuelve '' si colocó o la razón del fallo. opts.quiet: sin toast (barrido).
@@ -266,6 +294,10 @@ async function boot() {
           : 'Celda ocupada o altura inválida. La gerencia reprueba.',
       );
     }
+    if (type === 'silo') {
+      const mc = siloMouthComplaint(cell, height, rot8);
+      if (mc) return fail(mc);
+    }
     const paid = state.toolPrice(type);
     if (!state.buyTool(type)) {
       return fail('Fondos insuficientes. Finanzas sugiere vender más choclos.');
@@ -276,11 +308,13 @@ async function boot() {
       fanTier: state.fanTier(),
       age: state.level,
       noAutoConnect,
+      ...tuneOf(mode),
     });
     toolsR.add(type, cell.i, cell.j, height, rot8, pitchDeg, {
       fanTier: state.fanTier(),
       age: state.level,
       noAutoConnect,
+      ...tuneOf(mode),
     });
     sim.setModifiers(state.simModifiers());
     history.record({
@@ -315,25 +349,17 @@ async function boot() {
     const upgradeCost = canUpgradeInPlace
       ? upgradeInPlaceCost(entry.type, state.owned[entry.type], state.refundRate())
       : 0;
-    const isPausable = def.kind === 'producer' || def.kind === 'converter';
+    const isPausable = def.kind === 'producer' || def.kind === 'converter' || def.kind === 'silo';
     const recipeInputs = Array.isArray(entry.recipeInputs) && entry.recipeInputs.length
       ? entry.recipeInputs.slice()
       : (def.input ? [def.input] : []);
     const isConverter = def.kind === 'converter';
-    const sideName = (side) => {
-      if (side === 'back') return 'trasera';
-      if (side === 'right') return 'derecha';
-      if (side === 'left') return 'izquierda';
-      return 'frontal';
-    };
+    // M1.5-F2: una entrada trasera compartida; el panel cuenta por ingrediente.
     const inputRows = recipeInputs.map((kind) => {
       const arr = Array.isArray(entry.inputBuffers?.[kind]) ? entry.inputBuffers[kind] : [];
-      const side = def.inputSides?.[kind] || 'back';
       return {
         kind,
         name: PRODUCTS[kind]?.name || kind,
-        side,
-        sideLabel: sideName(side),
         count: arr.length,
         cap: CONVERTER_BUFFER_CAP,
         full: arr.length >= CONVERTER_BUFFER_CAP,
@@ -359,12 +385,71 @@ async function boot() {
         const first = missing[0];
         recipeState = 'Esperando ingredientes';
         recipeHint = waitingWrong
-          ? `Ingrediente equivocado. Esperando ${first.name} en entrada ${first.sideLabel}.`
-          : `Esperando ${first.name} en entrada ${first.sideLabel}.`;
+          ? `Ingrediente equivocado. Esperando ${first.name}.`
+          : `Esperando ${first.name}.`;
       }
       else if (outputQ >= outputCap) recipeState = 'Buffer de salida lleno';
       else if (outputQ > 0) recipeState = 'Lista para producir';
       else recipeState = 'Sin insumos';
+    }
+    // M1.5-G: estado del ventilador para el panel izquierdo (misma fuente
+    // que la física: sim.fanParams + fanMovesProduct).
+    let fanInfo = null;
+    if (entry.type === 'fan') {
+      const prm = sim.fanParams(entry);
+      fanInfo = {
+        tier: prm.fanTier,
+        powerPct: prm.powerPct,
+        forceEff: prm.force,
+        forceMax: prm.maxForce,
+        rangeEff: prm.range,
+        rangeMax: prm.maxRange,
+        rangeIsMax: (entry.rangeCells === null || entry.rangeCells === undefined),
+        rangeBonus: prm.rangeBonus,
+        moves: FAN_PANEL_PRODUCTS.map((kind) => ({
+          kind,
+          name: PRODUCTS[kind]?.name || kind,
+          ok: fanMovesProduct(kind, prm.fanTier, prm.powerPct),
+        })),
+      };
+    }
+    // M1.5-F4: estado del silo para el panel izquierdo.
+    let siloInfo = null;
+    if (entry.type === 'silo') {
+      const store = entry.siloStore || {};
+      const order = Array.isArray(entry.siloOrder) ? entry.siloOrder : Object.keys(store);
+      const rows = order
+        .filter((k) => (store[k]?.count || 0) > 0)
+        .map((k) => {
+          const s = store[k];
+          const normal = s.jumbo ? 0 : s.count;
+          const jumbo = s.jumbo ? s.count : 0;
+          return { kind: s.kind, name: PRODUCTS[s.kind]?.name || s.kind, normal, jumbo, count: s.count };
+        });
+      // Agrupa normal/jumbo por tipo para lectura compacta.
+      const byKind = new Map();
+      for (const r of rows) {
+        const cur = byKind.get(r.kind) || { kind: r.kind, name: r.name, normal: 0, jumbo: 0, count: 0 };
+        cur.normal += r.normal;
+        cur.jumbo += r.jumbo;
+        cur.count += r.count;
+        byKind.set(r.kind, cur);
+      }
+      const cap = sim.siloCap();
+      const intervalMs = sim.siloIntervalMs();
+      const stored = [...byKind.values()].reduce((a, r) => a + r.count, 0);
+      let state = 'Recibiendo';
+      if (entry.paused) state = 'Pausado';
+      else if (entry.siloBlocked) state = 'Salida bloqueada';
+      else if (stored >= cap) state = 'Lleno';
+      else if (stored > 0) state = 'Soltando';
+      siloInfo = {
+        contents: [...byKind.values()],
+        stored,
+        cap: Number.isFinite(cap) ? cap : SILO_CAP,
+        intervalMs: Number.isFinite(intervalMs) ? intervalMs : SILO_INTERVAL_MS,
+        state,
+      };
     }
     return {
       key: sim.key(entry.i, entry.j, entry.h),
@@ -387,6 +472,8 @@ async function boot() {
       outputBuffer: { count: outputQ, cap: outputCap },
       recipeState,
       recipeHint,
+      siloInfo,
+      fanInfo,
     };
   }
 
@@ -403,12 +490,71 @@ async function boot() {
     const c = sim.cellCenter(entry.i, entry.j);
     toolsR.setSelectedKey(key);
     toolsR.selectAt(c.x, entry.h * LEVEL_H, c.z);
-    if (entry.type === 'fan') {
-      toolsR.showSelectionCone(c.x, sim.fanParams(entry).origin.y, c.z, sim.fanAxis(entry));
-    }
+    refreshFanCone(entry);
     const info = entryInfo(entry);
     hud.showSelection(info);
     if (!mode) hud.focusUpgradesForTool(entry.type, info);
+  }
+
+  // M1.5-G: extrae ajuste de ventilador de modo/snapshot/pieza para
+  // re-colocaciones (cuentagotas, mover, deshacer, mejora in-place).
+  function tuneOf(src) {
+    if (!src) return {};
+    if (src.fanTune) return { powerPct: src.fanTune.powerPct, rangeCells: src.fanTune.rangeCells };
+    if (src.type === 'fan' && (src.powerPct !== undefined || src.rangeCells !== undefined)) {
+      return { powerPct: src.powerPct, rangeCells: src.rangeCells };
+    }
+    return {};
+  }
+
+  // M1.5-G: reconstruye el cono del ventilador con sus ajustes (misma fuente
+  // que la física). Se llama al seleccionar, rotar y cambiar potencia/alcance.
+  function refreshFanCone(entry) {
+    if (!entry || entry.type !== 'fan') return;
+    const c = sim.cellCenter(entry.i, entry.j);
+    toolsR.showSelectionCone(c.x, sim.fanParams(entry).origin.y, c.z, sim.fanAxis(entry), {
+      powerPct: entry.powerPct,
+      rangeCells: entry.rangeCells,
+      rangeBonus: sim.mods.fanRangeBonus || 0,
+    });
+  }
+
+  // M1.5-G: cicla potencia (B) o alcance (N) del ventilador seleccionado.
+  // Solo reduce desde máximos ya ganados; entra al historial (deshacer).
+  function cycleFanTune(which) {
+    if (mode || !selectedKey) return;
+    const entry = sim.tools.get(selectedKey);
+    if (!entry || entry.type !== 'fan') {
+      hud.toast('Seleccioná un ventilador para ajustar (B potencia, N alcance).');
+      return;
+    }
+    const cur = sim.getFanTune(entry);
+    let next;
+    if (which === 'power') {
+      const i = FAN_POWER_STEPS.indexOf(cur.powerPct);
+      next = { powerPct: FAN_POWER_STEPS[(i + 1 + FAN_POWER_STEPS.length) % FAN_POWER_STEPS.length] };
+    } else {
+      const top = Math.max(1, Math.floor(sim.fanParams(entry).maxRange));
+      next = { rangeCells: cur.rangeCells === null ? 1 : (cur.rangeCells >= top ? null : cur.rangeCells + 1) };
+    }
+    const before = sim.getFanTune(entry);
+    sim.setFanTune(entry, { ...before, ...next });
+    const after = sim.getFanTune(entry);
+    history.record({
+      kind: 'fantune',
+      at: { i: entry.i, j: entry.j, h: entry.h },
+      before,
+      after,
+    });
+    refreshFanCone(entry);
+    setSelectionFromEntry(entry);
+    hud.toast(
+      which === 'power'
+        ? `Potencia ${after.powerPct} % del máximo del tier.`
+        : after.rangeCells === null
+          ? 'Alcance máximo (sigue la mejora).'
+          : `Alcance ${after.rangeCells} celdas.`,
+    );
   }
 
   function trySell(cell) {
@@ -427,6 +573,8 @@ async function boot() {
       pitchDeg: entry.pitchDeg,
       fanTier: entry.fanTier,
       age: entry.age,
+      // M1.5-G: deshacer la venta restaura los ajustes del ventilador.
+      ...(entry.type === 'fan' ? { fanTune: sim.getFanTune(entry) } : {}),
     };
     const refund = state.sellTool(entry.type);
     sim.removeTool(found.i, found.j, found.h);
@@ -478,6 +626,8 @@ async function boot() {
       return;
     }
 
+    // M1.5-G: la mejora de tier conserva el porcentaje de potencia/alcance.
+    const keepTune = entry.type === 'fan' ? sim.getFanTune(entry) : null;
     const snap = {
       type: entry.type,
       i: entry.i,
@@ -501,13 +651,19 @@ async function boot() {
       snap.rot8,
       snap.pitchDeg,
       now(),
-      { fanTier: nextFanTier, age: nextAge, noAutoConnect: snap.noAutoConnect },
+      {
+        fanTier: nextFanTier,
+        age: nextAge,
+        noAutoConnect: snap.noAutoConnect,
+        ...(keepTune ? { powerPct: keepTune.powerPct, rangeCells: keepTune.rangeCells } : {}),
+      },
     );
     if (!ok) {
       sim.placeTool(snap.type, snap.i, snap.j, snap.h, snap.rot8, snap.pitchDeg, now(), {
         fanTier: snap.fanTier,
         age: snap.age,
         noAutoConnect: snap.noAutoConnect,
+        ...(keepTune ? { powerPct: keepTune.powerPct, rangeCells: keepTune.rangeCells } : {}),
       });
       toolsR.add(snap.type, snap.i, snap.j, snap.h, snap.rot8, snap.pitchDeg, {
         fanTier: snap.fanTier,
@@ -534,7 +690,7 @@ async function boot() {
     const entry = sim.tools.get(selectedKey);
     if (!entry) return;
     const def = TOOLS[entry.type];
-    if (def.kind !== 'producer' && def.kind !== 'converter') return;
+    if (def.kind !== 'producer' && def.kind !== 'converter' && def.kind !== 'silo') return;
     entry.paused = !entry.paused;
     setSelectionFromEntry(entry);
     hud.toast(entry.paused ? `${def.name} PAUSADO.` : `${def.name} REANUDADO.`);
@@ -550,12 +706,14 @@ async function boot() {
       fanTier: tool.fanTier,
       age: tool.age,
       noAutoConnect,
+      ...tuneOf(tool),
     });
     if (!ok) return false;
     toolsR.add(tool.type, at.i, at.j, at.h, tool.rot8, tool.pitchDeg, {
       fanTier: tool.fanTier,
       age: tool.age,
       noAutoConnect,
+      ...tuneOf(tool),
     });
     sim.setModifiers(state.simModifiers());
     return true;
@@ -618,6 +776,18 @@ async function boot() {
         return;
       }
       history.undo();
+    } else if (a.kind === 'fantune') {
+      // M1.5-G: deshacer ajuste de ventilador (potencia/alcance).
+      const e = sim.tools.get(sim.key(a.at.i, a.at.j, a.at.h));
+      if (!e || e.type !== 'fan') {
+        history.dropUndo();
+        hud.toast('No se puede deshacer: ese ventilador cambió.');
+        return;
+      }
+      sim.setFanTune(e, a.before);
+      history.undo();
+      refreshFanCone(e);
+      setSelectionFromEntry(e);
     }
     afterHistoryOp();
     hud.toast('Última acción deshecha.');
@@ -667,6 +837,17 @@ async function boot() {
         return;
       }
       history.redo();
+    } else if (a.kind === 'fantune') {
+      const e = sim.tools.get(sim.key(a.at.i, a.at.j, a.at.h));
+      if (!e || e.type !== 'fan') {
+        history.dropRedo();
+        hud.toast('No se puede rehacer: ese ventilador cambió.');
+        return;
+      }
+      sim.setFanTune(e, a.after);
+      history.redo();
+      refreshFanCone(e);
+      setSelectionFromEntry(e);
     }
     afterHistoryOp();
     hud.toast('Acción rehecha.');
@@ -681,6 +862,8 @@ async function boot() {
       return;
     }
     mode = { type: entry.type };
+    // M1.5-G: el cuentagotas conserva los ajustes del ventilador.
+    if (entry.type === 'fan') mode.fanTune = sim.getFanTune(entry);
     rot8 = entry.rot8;
     pitchDeg = entry.pitchDeg || 0;
     selectedKey = null;
@@ -690,7 +873,11 @@ async function boot() {
     hud.setMode(mode);
     updateGhost();
     updateConfig();
-    hud.toast(`Copiando: ${TOOLS[entry.type].name} (frente ${DIR_NAMES[rot8]}).`);
+    hud.toast(
+      entry.type === 'fan'
+        ? `Copiando: ${TOOLS[entry.type].name} (frente ${DIR_NAMES[rot8]}, ajustes incluidos).`
+        : `Copiando: ${TOOLS[entry.type].name} (frente ${DIR_NAMES[rot8]}).`,
+    );
   }
 
   // M1.5-C: mover siempre gratis. Levanta la pieza (sin vender) y la re-coloca.
@@ -705,6 +892,8 @@ async function boot() {
       fanTier: entry.fanTier,
       age: entry.age,
       noAutoConnect: Boolean(entry.noAutoConnect),
+      // M1.5-G: mover conserva los ajustes del ventilador.
+      ...(entry.type === 'fan' ? { fanTune: sim.getFanTune(entry) } : {}),
       fromKey: key,
       from: { i: found.i, j: found.j, h: found.h },
     };
@@ -754,9 +943,15 @@ async function boot() {
         : (entry.rot8 + step) % 8;
     const { type, i, j, h, pitchDeg, fanTier, age } = entry;
     const noAutoConnect = Boolean(entry.noAutoConnect);
+    const keepTune = type === 'fan' ? sim.getFanTune(entry) : null;
     sim.removeTool(i, j, h);
     toolsR.remove(i, j, h);
-    sim.placeTool(type, i, j, h, nr, pitchDeg, now(), { fanTier, age, noAutoConnect });
+    sim.placeTool(type, i, j, h, nr, pitchDeg, now(), {
+      fanTier,
+      age,
+      noAutoConnect,
+      ...(keepTune ? { powerPct: keepTune.powerPct, rangeCells: keepTune.rangeCells } : {}),
+    });
     toolsR.add(type, i, j, h, nr, pitchDeg, { fanTier, age, noAutoConnect });
     rot8 = nr;
     const key = sim.key(i, j, h);
@@ -779,9 +974,15 @@ async function boot() {
       if (want === e.rot8) continue;
       const { type, i, j, h, pitchDeg, fanTier, age } = e;
       const noAutoConnect = Boolean(e.noAutoConnect);
+      const keepTune = type === 'fan' ? sim.getFanTune(e) : null;
       sim.removeTool(i, j, h);
       toolsR.remove(i, j, h);
-      sim.placeTool(type, i, j, h, want, pitchDeg, now(), { fanTier, age, noAutoConnect });
+      sim.placeTool(type, i, j, h, want, pitchDeg, now(), {
+        fanTier,
+        age,
+        noAutoConnect,
+        ...(keepTune ? { powerPct: keepTune.powerPct, rangeCells: keepTune.rangeCells } : {}),
+      });
       toolsR.add(type, i, j, h, want, pitchDeg, { fanTier, age, noAutoConnect });
       fixed++;
     }
@@ -815,7 +1016,26 @@ async function boot() {
   function debugFillSelectedBuffers() {
     if (!selectedKey) return hud.toast('Debug: seleccioná una máquina.');
     const e = sim.tools.get(selectedKey);
-    if (!e || TOOLS[e.type]?.kind !== 'converter') return hud.toast('Debug: solo conversores.');
+    if (!e || (TOOLS[e.type]?.kind !== 'converter' && e.type !== 'silo')) {
+      return hud.toast('Debug: solo conversores y silo.');
+    }
+    if (e.type === 'silo') {
+      e.siloStore = e.siloStore || {};
+      e.siloOrder = e.siloOrder || [];
+      const cap = sim.siloCap();
+      let n = sim.siloCount(e);
+      while (n < cap) {
+        const key = 'corn:n';
+        if (!e.siloStore[key]) {
+          e.siloStore[key] = { kind: 'corn', jumbo: false, count: 0 };
+          e.siloOrder.push(key);
+        }
+        e.siloStore[key].count++;
+        n++;
+      }
+      hud.toast('Debug: silo lleno.');
+      return;
+    }
     if (Array.isArray(e.buffer)) {
       while (e.buffer.length < CONVERTER_BUFFER_CAP) {
         e.buffer.push({ timeMs: TOOLS[e.type].time, jumbo: false, fatMult: 1, count: 1 });
@@ -833,7 +1053,15 @@ async function boot() {
   function debugClearSelectedBuffers() {
     if (!selectedKey) return hud.toast('Debug: seleccioná una máquina.');
     const e = sim.tools.get(selectedKey);
-    if (!e || TOOLS[e.type]?.kind !== 'converter') return hud.toast('Debug: solo conversores.');
+    if (!e || (TOOLS[e.type]?.kind !== 'converter' && e.type !== 'silo')) {
+      return hud.toast('Debug: solo conversores y silo.');
+    }
+    if (e.type === 'silo') {
+      e.siloStore = {};
+      e.siloOrder = [];
+      hud.toast('Debug: silo vacío.');
+      return;
+    }
     if (Array.isArray(e.buffer)) e.buffer.length = 0;
     if (e.inputBuffers && typeof e.inputBuffers === 'object') {
       for (const arr of Object.values(e.inputBuffers)) if (Array.isArray(arr)) arr.length = 0;
@@ -1020,10 +1248,17 @@ async function boot() {
     const r8 = mode.moving ? mode.moving.rot8 : rot8;
     const pd = mode.moving ? mode.moving.pitchDeg : pitchDeg;
     const h = mode.moving ? height : height;
-    const ok = canPlace(type, hoverCell.i, hoverCell.j, h);
+    let ok = canPlace(type, hoverCell.i, hoverCell.j, h);
+    // M1.5-F4: fantasma rojo si la boca del silo nacería dentro de otra máquina.
+    if (ok && type === 'silo' && !mode.moving && siloMouthComplaint(hoverCell, h, r8)) ok = false;
     const affordable = mode.moving ? true : state.money >= state.toolPrice(type);
     const axis = type === 'fan' ? fanAxis3(r8, pd) : null;
-    toolsR.showGhost(type, r8, pd, hoverCell, h, ok && affordable, axis);
+    // M1.5-G: el fantasma del ventilador muestra los ajustes copiados (I).
+    const ghostTune =
+      type === 'fan'
+        ? { ...((mode.moving || mode).fanTune ?? { powerPct: 100, rangeCells: null }), rangeBonus: sim.mods.fanRangeBonus || 0 }
+        : null;
+    toolsR.showGhost(type, r8, pd, hoverCell, h, ok && affordable, axis, ghostTune);
   }
 
   let downInfo = null;
@@ -1075,6 +1310,8 @@ async function boot() {
     }
     if (drag && e.buttons & 1) dragStep(e);
     updateGhost();
+    // M1.5-F4: el aviso de boca-pegada del silo depende de la celda bajo el cursor.
+    if (mode && mode.type === 'silo') updateConfig();
   });
 
   // Clic con mano vacía en producto suelto (fuera de canaleta): lo vende al
@@ -1221,6 +1458,9 @@ async function boot() {
 
   window.addEventListener('keydown', (e) => {
     const lk = e.key.toLowerCase();
+    // M1.5-G fix: escribiendo en inputs (panel debug) los atajos no actúan.
+    const tag = (e.target && e.target.tagName) || '';
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
     // Ctrl+Z / Ctrl+Y: deshacer y rehacer (place | sell | move).
     if ((e.ctrlKey || e.metaKey) && lk === 'z') {
       e.preventDefault();
@@ -1278,6 +1518,10 @@ async function boot() {
       hud.cb.onSelectRemove();
     } else if (e.key === 'm' || e.key === 'M') {
       hud.cb.onSelectMove();
+    } else if (lk === 'b') {
+      cycleFanTune('power');
+    } else if (lk === 'n') {
+      cycleFanTune('range');
     } else if (e.key === '[') {
       height = Math.max(0, height - 1);
       hud.setHeight(height);

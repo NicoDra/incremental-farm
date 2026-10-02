@@ -21,6 +21,7 @@ const ICONS = {
   palomitera: '🍿',
   jamonera: '🍖',
   jamonera_industrial: '🏭',
+  silo: '🛢️',
 };
 
 function byId(id) {
@@ -90,6 +91,21 @@ export class Hud {
       t.addEventListener('click', () => this.openDrawer(t.dataset.tab)),
     );
     byId('btn-close-guide').addEventListener('click', () => this.hideGuide());
+    // M1.5-G fix: el panel se reconstruye en cada frame (estados vivos), así
+    // que los botones usan delegación — un solo listener que sobrevive al rebuild.
+    this.el.sel.addEventListener('click', (ev) => {
+      const b = ev.target?.closest?.('button[data-act]');
+      if (!b || !this.el.sel.contains(b)) return;
+      const act = b.dataset.act;
+      if (act === 'emit') this.cb.onEmitSelected?.();
+      else if (act === 'pause') this.cb.onPauseToggle?.();
+      else if (act === 'move') this.cb.onMoveSelected?.();
+      else if (act === 'upgrade') this.cb.onUpgradeSelected?.();
+      else if (act === 'sell') this.cb.onSellSelected?.();
+      else if (act === 'close') this.cb.onCloseSelection?.();
+      else if (act === 'fan-power') this.cb.onFanPower?.();
+      else if (act === 'fan-range') this.cb.onFanRange?.();
+    });
     document.addEventListener?.('pointerdown', (ev) => {
       if (this.el.globalMenu.classList.contains('hidden')) return;
       const t = ev.target;
@@ -336,6 +352,7 @@ export class Hud {
     if (type === 'corral') return 'corral';
     if (type === 'palomitera') return 'palomitera';
     if (type === 'jamonera') return 'jamonera';
+    if (type === 'silo') return 'silo';
     return '__none__';
   }
 
@@ -384,6 +401,20 @@ export class Hud {
 
   showSelection(info) {
     const el = this.el.sel;
+    // M1.5-G fix: el frame loop re-llama cada frame; si nada cambió se saltea
+    // el rebuild (menos churn de DOM; los clics van por delegación igual).
+    if (info) {
+      let sig = '';
+      try {
+        sig = JSON.stringify(info);
+      } catch {
+        sig = String(Math.random());
+      }
+      if (sig === this._selSig && !el.classList.contains('hidden')) return;
+      this._selSig = sig;
+    } else {
+      this._selSig = null;
+    }
     el.innerHTML = '';
     if (!info) {
       this.upgradeFocusType = null;
@@ -406,6 +437,13 @@ export class Hud {
       recipeLine.textContent = `Receta: ${info.recipeInputs.map((r) => r.name).join(' + ')}`;
       el.appendChild(recipeLine);
 
+      if (info.recipeInputs.length > 1) {
+        const sidesLine = document.createElement('div');
+        sidesLine.className = 'sel-sub';
+        sidesLine.textContent = 'Entrada compartida por la trasera.';
+        el.appendChild(sidesLine);
+      }
+
       const stateLine = document.createElement('div');
       stateLine.className = 'sel-state';
       stateLine.textContent = `Estado: ${info.recipeState || '—'}`;
@@ -419,7 +457,7 @@ export class Hud {
       for (const row of info.recipeInputs) {
         const inputLine = document.createElement('div');
         inputLine.className = 'sel-sub';
-        inputLine.textContent = `${row.name} (${row.sideLabel}): ${row.count}/${row.cap}${row.full ? ' · llena' : ''}`;
+        inputLine.textContent = `${row.name}: ${row.count}/${row.cap}${row.full ? ' · llena' : ''}`;
         el.appendChild(inputLine);
       }
 
@@ -430,13 +468,85 @@ export class Hud {
         el.appendChild(hint);
       }
     }
+    if (info.siloInfo) {
+      const s = info.siloInfo;
+      const stateLine = document.createElement('div');
+      stateLine.className = 'sel-state';
+      stateLine.textContent = `Estado: ${s.state}`;
+      el.appendChild(stateLine);
+
+      const capLine = document.createElement('div');
+      capLine.className = 'sel-sub';
+      capLine.textContent = `Capacidad: ${s.stored}/${s.cap} · ritmo 1 cada ${(s.intervalMs / 1000).toFixed(1)}s`;
+      el.appendChild(capLine);
+
+      if (!s.contents.length) {
+        const empty = document.createElement('div');
+        empty.className = 'sel-sub';
+        empty.textContent = 'Vacío: entra por la trasera.';
+        el.appendChild(empty);
+      }
+      for (const row of s.contents) {
+        const line = document.createElement('div');
+        line.className = 'sel-sub';
+        const jumboTxt = row.jumbo > 0 ? ` (+${row.jumbo} jumbo)` : '';
+        line.textContent = `${row.name}: ${row.count}${jumboTxt}`;
+        el.appendChild(line);
+      }
+      if (s.stored >= s.cap) {
+        const full = document.createElement('div');
+        full.className = 'sel-hint';
+        full.textContent = 'Lleno: el excedente espera en la canaleta.';
+        el.appendChild(full);
+      }
+    }
+    if (info.fanInfo) {
+      // M1.5-G: tier, potencia y alcance actual/máximo con su origen, y qué mueve.
+      const f = info.fanInfo;
+      const tierLine = document.createElement('div');
+      tierLine.className = 'sel-sub';
+      tierLine.textContent = `Ventilador tier ${f.tier + 1}`;
+      el.appendChild(tierLine);
+
+      const powLine = document.createElement('div');
+      powLine.className = 'sel-state';
+      powLine.textContent =
+        `Potencia ${f.powerPct} % (${f.forceEff.toFixed(2)} de ${f.forceMax.toFixed(2)} máx tier)`;
+      el.appendChild(powLine);
+
+      const rangeLine = document.createElement('div');
+      rangeLine.className = 'sel-sub';
+      const bonusTxt = f.rangeBonus > 0 ? ` (mejora +${f.rangeBonus.toFixed(1)})` : '';
+      rangeLine.textContent = f.rangeIsMax
+        ? `Alcance máximo ${f.rangeMax.toFixed(1)}${bonusTxt}: sigue la mejora`
+        : `Alcance ${f.rangeEff.toFixed(1)} de ${f.rangeMax.toFixed(1)} máx comprado${bonusTxt}`;
+      el.appendChild(rangeLine);
+
+      for (const row of f.moves) {
+        const line = document.createElement('div');
+        line.className = 'sel-sub';
+        line.textContent = `${row.ok ? '✓' : '✗'} ${row.name}`;
+        el.appendChild(line);
+      }
+
+      const powBtn = document.createElement('button');
+      powBtn.textContent = 'Potencia (B)';
+      powBtn.title = 'Cicla la potencia: 100 → 75 → 50 → 25 % del máximo del tier';
+      powBtn.dataset.act = 'fan-power';
+      el.appendChild(powBtn);
+      const rangeBtn = document.createElement('button');
+      rangeBtn.textContent = 'Alcance (N)';
+      rangeBtn.title = 'Cicla el alcance: máximo → 1 → 2 → … → máximo';
+      rangeBtn.dataset.act = 'fan-range';
+      el.appendChild(rangeBtn);
+    }
     const actions = document.createElement('div');
     actions.className = 'sel-actions';
     if (info.isSembrador) {
       const b = document.createElement('button');
       b.textContent = 'Emitir';
       b.title = 'Emite 1 choclo gratis (igual que clic en la pieza)';
-      b.addEventListener('click', () => this.cb.onEmitSelected());
+      b.dataset.act = 'emit';
       actions.appendChild(b);
     }
     if (info.isPausable) {
@@ -444,12 +554,12 @@ export class Hud {
       p.className = info.isPaused ? 'danger' : 'success';
       p.textContent = info.isPaused ? '▶ Reanudar' : '⏸ Pausar';
       p.title = info.isPaused ? 'Reanuda el ciclo de la máquina' : 'Pausa el ciclo de la máquina';
-      p.addEventListener('click', () => this.cb.onPauseToggle?.());
+      p.dataset.act = 'pause';
       actions.appendChild(p);
     }
     const mv = document.createElement('button');
     mv.textContent = 'Mover';
-    mv.addEventListener('click', () => this.cb.onMoveSelected());
+    mv.dataset.act = 'move';
     actions.appendChild(mv);
     if (info.canUpgradeInPlace) {
       const up = document.createElement('button');
@@ -459,17 +569,17 @@ export class Hud {
         ? `Mejorar ${formatMoney(info.upgradeCost)}`
         : `Mejorar ${formatMoney(info.upgradeCost)}`;
       up.title = 'Sube esta construcción al siguiente tier sin demoler/reponer';
-      up.addEventListener('click', () => this.cb.onUpgradeSelected?.());
+      up.dataset.act = 'upgrade';
       actions.appendChild(up);
     }
     const rm = document.createElement('button');
     rm.className = 'danger';
     rm.textContent = `Demoler +${formatMoney(info.refund)}`;
-    rm.addEventListener('click', () => this.cb.onSellSelected());
+    rm.dataset.act = 'sell';
     const x = document.createElement('button');
     x.textContent = '✕';
     x.title = 'Cerrar';
-    x.addEventListener('click', () => this.cb.onCloseSelection?.());
+    x.dataset.act = 'close';
     actions.appendChild(rm);
     actions.appendChild(x);
     el.appendChild(actions);

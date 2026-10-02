@@ -21,6 +21,8 @@ const html = readFileSync('./index.html', 'utf8');
 const css = readFileSync('./src/style.css', 'utf8');
 const fx = readFileSync('./src/render/fx.js', 'utf8');
 const world = readFileSync('./src/sim/world.js', 'utf8');
+const hud = readFileSync('./src/ui/hud.js', 'utf8');
+const main = readFileSync('./src/main.js', 'utf8');
 
 // 1. cajón sin pestaña Ayuda
 ok(!/data-tab="help"/.test(html), 'cajón sin pestaña Ayuda');
@@ -49,5 +51,18 @@ const iSel = html.indexOf('id="sel-panel"');
 ok(iRail >= 0 && iSel > iRail, '#sel-panel dentro de #left-rail');
 const selBodies = [...css.matchAll(/#sel-panel\s*\{([^}]*)\}/g)].map((m) => m[1]);
 ok(selBodies.length > 0 && !selBodies.some((b) => /position\s*:\s*absolute/.test(b)), '#sel-panel sin absolute');
+
+// 6. M1.5-G fix botones: el panel se reconstruye por frame, así que los
+// botones usan delegación (un solo listener) en vez de listeners por botón.
+ok(/el\.sel\.addEventListener\('click'/.test(hud), 'panel: un solo listener delegado en #sel-panel');
+for (const act of ['emit', 'pause', 'move', 'upgrade', 'sell', 'close', 'fan-power', 'fan-range']) {
+  ok(new RegExp(`dataset\\.act = '${act}'`).test(hud), `panel: botón data-act="${act}"`);
+}
+{
+  const body = hud.slice(hud.indexOf('showSelection(info) {'));
+  ok(!/addEventListener\('click'/.test(body), 'panel: showSelection sin listeners por botón');
+}
+// 7. M1.5-G fix atajos: no actúan escribiendo en inputs.
+ok(/INPUT\|TEXTAREA\|SELECT/.test(main), 'atajos ignorados dentro de inputs');
 
 console.log(`\nSMOKE-D4-UI6 PASS (${pass} checks)`);

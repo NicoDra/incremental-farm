@@ -22,23 +22,19 @@ import {
   EMIT_IMPULSE,
   CONVERTER_ACCEPT_SPEED,
   CONVERTER_BUFFER_CAP,
+  SILO_CAP,
+  SILO_INTERVAL_MS,
+  SILO_MOUTH_CLEAR_R,
   CHANNEL_WALL_H,
   JUMBO_SCALE,
   SEMBRADOR_MANUAL_COOLDOWN_MS,
   snapRot8,
   computeLevelOpenings,
+  PRODUCT_PHYS,
+  FAN_POWER_DEFAULT,
+  normalizeFanTune,
+  fanMovesProduct,
 } from 'chanchos-shared';
-
-// Física por producto: media caja, densidad, restitución (la masa sale de volumen × densidad)
-const PRODUCT_PHYS = {
-  corn: { half: [0.16, 0.16, 0.16], density: 0.8, restitution: 0.3 },
-  pumpkin: { half: [0.24, 0.24, 0.24], density: 1.0, restitution: 0.25 },
-  salt: { half: [0.13, 0.13, 0.13], density: 1.1, restitution: 0.2 },
-  feed: { half: [0.2, 0.18, 0.2], density: 0.9, restitution: 0.24 },
-  popcorn: { half: [0.1, 0.1, 0.1], density: 0.6, restitution: 0.5 },
-  pig: { half: [0.26, 0.17, 0.34], density: 1.2, restitution: 0.3 },
-  ham: { half: [0.2, 0.14, 0.24], density: 1.2, restitution: 0.25 },
-};
 
 const WALL_H = 1.2;
 const RAMP_HALF_LEN = 0.707; // la rampa baja exactamente 1 nivel en 1 celda (45°)
@@ -79,6 +75,8 @@ export function defaultModifiers() {
     corralDoubleChance: 0,
     jamoneraTimeMs: 4000,
     jamoneraValueMult: 1,
+    siloCap: SILO_CAP,
+    siloIntervalMs: SILO_INTERVAL_MS,
     fanTier: 0,
     fanRangeBonus: 0,
     fanMode: 0, // 0 normal, 1 pulsos, 2 giratorio
@@ -106,6 +104,54 @@ export class SimWorld {
 
   setFanTier(tier) {
     this.defaultFanTier = Math.max(0, Math.min(tier, FAN_TIERS.length - 1));
+  }
+
+  // M1.5-F4: capacidad total y ritmo del silo (vienen de mejoras vía setModifiers).
+  siloCap() {
+    const c = this.mods.siloCap;
+    return Number.isFinite(c) && c > 0 ? Math.floor(c) : SILO_CAP;
+  }
+
+  siloIntervalMs() {
+    const v = this.mods.siloIntervalMs;
+    return Number.isFinite(v) && v > 0 ? v : SILO_INTERVAL_MS;
+  }
+
+  // M1.5-G: ajuste de potencia/alcance por ventilador. Normaliza a pasos
+  // enteros; el alcance se recorta al máximo vigente al usar (fanConeParams).
+  getFanTune(entry) {
+    const n = normalizeFanTune({ powerPct: entry?.powerPct, rangeCells: entry?.rangeCells });
+    return { powerPct: n.powerPct, rangeCells: n.rangeCells };
+  }
+
+  setFanTune(entry, tune) {
+    if (!entry || entry.type !== 'fan') return null;
+    const before = this.getFanTune(entry);
+    const n = normalizeFanTune(tune);
+    entry.powerPct = n.powerPct;
+    entry.rangeCells = n.rangeCells;
+    return { before, after: this.getFanTune(entry) };
+  }
+
+  siloCount(e) {
+    if (!e || !e.siloStore) return 0;
+    let n = 0;
+    for (const s of Object.values(e.siloStore)) n += s.count || 0;
+    return n;
+  }
+
+  // Boca de salida libre: ningún cuerpo ocupando el área de aparición.
+  mouthClear(e) {
+    const m = this.mouthPos(e);
+    const r2 = SILO_MOUTH_CLEAR_R * SILO_MOUTH_CLEAR_R;
+    for (const p of this.products) {
+      const t = p.body.translation();
+      if (t.y > e.baseY + 1.0) continue;
+      const dx = t.x - m.x;
+      const dz = t.z - m.z;
+      if (dx * dx + dz * dz < r2) return false;
+    }
+    return true;
   }
 
   key(i, j, h) {
@@ -341,8 +387,8 @@ export class SimWorld {
     // de colocación: tryPlace, placeFree, starter y migración pasan por acá.
     rot8 = snapRot8(type, rot8);
     // M1.5-D4: el fan se coloca en cualquier nivel (0/1/2); el resto de las
-    // piezas no-canaleta sigue solo en el nivel 0.
-    if (type === 'fan') {
+    // piezas no-canaleta sigue solo en el nivel 0 (salvo el silo, M1.5-F4).
+    if (type === 'fan' || type === 'silo') {
       if (h < 0 || h > 2) return false;
     } else if (def.kind !== 'channel' && h !== 0) return false;
     if (def.minH && h < def.minH) return false;
@@ -367,6 +413,9 @@ export class SimWorld {
       coolUntil: 0,
       fanTier: opts.fanTier ?? this.defaultFanTier ?? 0,
       age: opts.age ?? 0,
+      // M1.5-G: ajuste por ventilador (default 100 % / máximo). Resto: ignorado.
+      powerPct: normalizeFanTune({ powerPct: opts.powerPct }).powerPct ?? FAN_POWER_DEFAULT,
+      rangeCells: normalizeFanTune({ rangeCells: opts.rangeCells }).rangeCells ?? null,
       noAutoConnect: Boolean(opts.noAutoConnect), // M1.5-D4: Shift = solo defaults
       pending: false,
       pendingJumbo: false,
@@ -376,6 +425,12 @@ export class SimWorld {
       buffer: [],
       inputBuffers: null,
       recipeInputs: null,
+      // M1.5-F4: depósito del silo (contadores por tipo, sin cuerpo físico).
+      siloStore: null,
+      siloOrder: null,
+      siloRot: 0,
+      siloNext: 0,
+      siloBlocked: false,
     };
 
       if (def.kind === 'channel') {
@@ -386,49 +441,49 @@ export class SimWorld {
       const b = this.fixedBody(c.x, baseY, c.z, yawQuatDeg(yawDeg(rot8)));
       this.addBox(b, 0.35, 0.45, 0.35, 0.1, 0.45, 0.1, 0.5);
       entry.body = b;
-      } else if (def.kind === 'producer' || def.kind === 'converter') {
-        // Cuerpo con boca de SALIDA al frente. La entrada (conversores) es la
-        // abertura trasera: el modelo la muestra y la física la exige (ver updateConverters).
-        const b = this.fixedBody(c.x, 0, c.z, yawQuatDeg(yawDeg(rot8)));
+      } else if (def.kind === 'producer' || def.kind === 'converter' || def.kind === 'silo') {
+        // Cuerpo con boca de SALIDA al frente. La entrada (conversores y silo)
+        // es la abertura trasera: el modelo la muestra y la física la exige.
+        // M1.5-F4: el silo vive en N0/N1/N2 (como el fan); su cuerpo va a baseY.
+        const b = this.fixedBody(c.x, def.kind === 'silo' ? baseY : 0, c.z, yawQuatDeg(yawDeg(rot8)));
         this.addBox(b, 0, 0.4, 0, 0.35, 0.4, 0.35, 0.5);
         // M1.5-D3: ensanchar el hueco de entrada trasero (±0.34 vs ±0.25) para que
-        // entren productos JUMBO holgadamente.
-        if (def.kind === 'converter') {
-          const yaw = yawQuatDeg(yawDeg(rot8));
-          void yaw;
-          // Las mitades se colocan en el marco local del cuerpo (ya rotado):
-          // atrás = +z local.
-          this.addBox(b, -0.34, 0.4, 0.32, 0.1, 0.4, 0.06, 0.5);
-          this.addBox(b, 0.34, 0.4, 0.32, 0.1, 0.4, 0.06, 0.5);
+        // entren productos JUMBO holgadamente. Receta doble: más ancha aún
+        // (±0.44), una boca compartida para los dos ingredientes.
+        if (def.kind === 'converter' || def.kind === 'silo') {
+          const insForGap = Array.isArray(def.inputs) ? def.inputs : null;
+          const wide = insForGap && insForGap.length > 1 ? 0.44 : 0.34;
+          this.addBox(b, -wide, 0.4, 0.32, 0.1, 0.4, 0.06, 0.5);
+          this.addBox(b, wide, 0.4, 0.32, 0.1, 0.4, 0.06, 0.5);
           this.addBox(b, 0, 0.72, 0.32, 0.35, 0.08, 0.06, 0.5);
+          entry.colWiden = Boolean(insForGap && insForGap.length > 1);
         }
         entry.body = b;
         if (def.kind === 'converter') {
           const ins = Array.isArray(def.inputs) ? def.inputs.slice() : [def.input].filter(Boolean);
           entry.recipeInputs = ins;
+          // M1.5-F2: entrada única trasera para toda receta (los dos
+          // ingredientes entran por atrás; buffers separados por tipo).
           entry.inputDirs = Object.fromEntries(
-            ins.map((k) => {
-              const side = def.inputSides?.[k] || 'back';
-              const d = side === 'front'
-                ? { x: entry.dir.x, z: entry.dir.z }
-                : side === 'right'
-                  ? { x: entry.dir.z, z: -entry.dir.x }
-                  : side === 'left'
-                    ? { x: -entry.dir.z, z: entry.dir.x }
-                    : { x: -entry.dir.x, z: -entry.dir.z };
-              return [k, d];
-            }),
+            ins.map((k) => [k, { x: -entry.dir.x, z: -entry.dir.z }]),
           );
           if (ins.length > 1) {
             entry.inputBuffers = Object.fromEntries(ins.map((k) => [k, []]));
           }
         }
+        if (def.kind === 'silo') {
+          entry.siloStore = {};
+          entry.siloOrder = [];
+          entry.siloRot = 0;
+          entry.siloNext = nowMs + this.siloIntervalMs();
+          entry.siloBlocked = false;
+        }
       }
 
     this.tools.set(key, entry);
-    // M1.5-D4: productores/conversores cambian las aperturas de las canaletas
-    // vecinas (bocas de salida/entrada), así que también disparan el rebuild.
-    if (def.kind === 'channel' || def.kind === 'producer' || def.kind === 'converter') {
+    // M1.5-D4: productores/conversores/silo cambian las aperturas de las
+    // canaletas vecinas (bocas de salida/entrada), así que también disparan el rebuild.
+    if (['channel', 'producer', 'converter', 'silo'].includes(def.kind)) {
       this.rebuildChannelsAtLevel(h);
     }
     return true;
@@ -441,7 +496,7 @@ export class SimWorld {
     if (e.body) this.world.removeRigidBody(e.body);
     this.tools.delete(key);
     const kind = TOOLS[e.type]?.kind;
-    if (kind === 'channel' || kind === 'producer' || kind === 'converter') {
+    if (['channel', 'producer', 'converter', 'silo'].includes(kind)) {
       this.rebuildChannelsAtLevel(h);
     }
     return e;
@@ -452,7 +507,7 @@ export class SimWorld {
     void tier;
     return {
       x: entry.cx + entry.dir.x * 0.8,
-      y: 0.55,
+      y: (entry.baseY || 0) + 0.55,
       z: entry.cz + entry.dir.z * 0.8,
     };
   }
@@ -502,6 +557,7 @@ export class SimWorld {
     this.world.timestep = dt;
     this.updateProducers(nowMs);
     this.updateConverters(nowMs);
+    this.updateSilos(nowMs);
     this.updateDivisors();
     this.updateCurvas();
     this.applyFanForces(dt, nowMs);
@@ -735,6 +791,85 @@ export class SimWorld {
     }
   }
 
+  // M1.5-F4: Silo, depósito en línea. Los guardados son contadores por
+  // tipo+jumbo (sin cuerpo físico) y no cuentan contra MAX_BODIES. Suelta 1
+  // por intervalo, alternando tipos, solo con la boca libre. Sin deuda de
+  // ritmo: bloqueado o vacío reprograma al próximo intervalo (sin ráfagas).
+  updateSilos(nowMs) {
+    const cap = this.siloCap();
+    const interval = this.siloIntervalMs();
+    for (const e of this.tools.values()) {
+      if (e.type !== 'silo') continue;
+      if (e.paused) continue;
+      if (!e.siloStore || !Array.isArray(e.siloOrder)) {
+        e.siloStore = e.siloStore || {};
+        e.siloOrder = e.siloOrder || [];
+        e.siloRot = e.siloRot || 0;
+      }
+      if (!e.siloNext) e.siloNext = nowMs + interval;
+      // Pasada 1 — suelta a ritmo fijo.
+      if (nowMs >= e.siloNext) {
+        const keys = e.siloOrder.filter((k) => (e.siloStore[k]?.count || 0) > 0);
+        e.siloBlocked = false;
+        if (!keys.length) {
+          e.siloNext = nowMs + interval;
+        } else if (!this.mouthClear(e)) {
+          // boca ocupada: espera sin perder nada ni acumular deuda.
+          e.siloBlocked = true;
+          e.siloNext = nowMs + interval;
+        } else {
+          const pick = keys[(e.siloRot || 0) % keys.length];
+          const slot = e.siloStore[pick];
+          const m = this.mouthPos(e);
+          const out = this.spawnProduct(
+            slot.kind,
+            m.x + e.dir.x * 0.18,
+            m.y,
+            m.z + e.dir.z * 0.18,
+            { x: e.dir.x * EMIT_IMPULSE, y: 0, z: e.dir.z * EMIT_IMPULSE },
+            { jumbo: slot.jumbo },
+          );
+          if (!out && this.products.length >= MAX_BODIES) {
+            e.siloBlocked = true;
+            e.siloNext = nowMs + interval;
+          } else if (out) {
+            slot.count--;
+            e.siloRot = (e.siloRot || 0) + 1;
+            if (slot.count <= 0) {
+              delete e.siloStore[pick];
+              e.siloOrder = e.siloOrder.filter((k) => k !== pick);
+            }
+            e.siloNext = nowMs + interval;
+          } else {
+            e.siloNext = nowMs + interval;
+          }
+        }
+      }
+      // Pasada 2 — aceptación por la trasera. Al tope no acepta: el producto
+      // extra queda esperando en la canaleta (sin tocarlo, sin rebote).
+      if (this.siloCount(e) >= cap) continue;
+      for (let idx = 0; idx < this.products.length; idx++) {
+        const p = this.products[idx];
+        if (!PRODUCT_PHYS[p.kind]) continue;
+        const t = p.body.translation();
+        if (Math.abs(t.x - e.cx) > 0.72 || Math.abs(t.z - e.cz) > 0.72 || t.y > e.baseY + 0.95) continue;
+        const along = (t.x - e.cx) * -e.dir.x + (t.z - e.cz) * -e.dir.z;
+        if (along < -0.1) continue; // frente: no acepta
+        const v = p.body.linvel();
+        if (Math.hypot(v.x, v.y, v.z) > CONVERTER_ACCEPT_SPEED) continue;
+        const key = `${p.kind}:${p.jumbo ? 'j' : 'n'}`;
+        if (!e.siloStore[key]) {
+          e.siloStore[key] = { kind: p.kind, jumbo: p.jumbo, count: 0 };
+          e.siloOrder.push(key);
+        }
+        e.siloStore[key].count++;
+        this.removeProduct(idx);
+        idx--;
+        if (this.siloCount(e) >= cap) break;
+      }
+    }
+  }
+
   fanParams(entry, nowMs = 0) {
     const ax = this.fanAxis(entry, nowMs);
     const horizLen = Math.hypot(ax.x, ax.z) || 1;
@@ -746,6 +881,9 @@ export class SimWorld {
       cy: entry.baseY, // M1.5-D4: cono y banda vertical del nivel del fan
       cz: entry.cz,
       rangeBonus: this.mods.fanRangeBonus || 0,
+      // M1.5-G: potencia y alcance efectivos (misma fuente que el cono visual).
+      powerPct: entry.powerPct,
+      rangeCells: entry.rangeCells,
     });
   }
 
@@ -780,11 +918,14 @@ export class SimWorld {
     for (const e of this.tools.values()) {
       if (e.type !== 'fan') continue;
       const prm = this.fanParams(e, nowMs);
+      const fanTier = e.fanTier ?? this.defaultFanTier ?? 0;
       const ax = prm.direction;
       const ox = prm.origin.x;
       const oy = prm.origin.y;
       const oz = prm.origin.z;
       for (const p of this.products) {
+        // M1.5-G: mismo predicado que el panel (registrado + masa + potencia).
+        if (!fanMovesProduct(p.kind, fanTier, e.powerPct)) continue;
         const t = p.body.translation();
         // M1.5-D4: banda vertical — solo empuja productos del mismo nivel.
         if (t.y < prm.yMin || t.y > prm.yMax) continue;
