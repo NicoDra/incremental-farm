@@ -360,6 +360,29 @@ button {
   line-height: 1.25;
 }
 
+#sel-panel .sel-sub {
+  font-size: 0.7rem;
+  line-height: 1.25;
+  color: #2b1e14;
+}
+
+#sel-panel .sel-state {
+  font-size: 0.72rem;
+  line-height: 1.25;
+  font-weight: 800;
+  color: #1c3e2a;
+}
+
+#sel-panel .sel-hint {
+  font-size: 0.7rem;
+  line-height: 1.25;
+  color: #7a4f1a;
+  background: #fff1d7;
+  border: 1px solid #c5975a;
+  border-radius: 0.35rem;
+  padding: 0.16rem 0.35rem;
+}
+
 .sel-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

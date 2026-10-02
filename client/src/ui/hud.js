@@ -400,6 +400,36 @@ export class Hud {
     txt.className = 'sel-txt';
     txt.textContent = `${info.name} · frente ${info.dir} · N${info.h}`;
     el.appendChild(txt);
+    if (Array.isArray(info.recipeInputs) && info.recipeInputs.length) {
+      const recipeLine = document.createElement('div');
+      recipeLine.className = 'sel-sub';
+      recipeLine.textContent = `Receta: ${info.recipeInputs.map((r) => r.name).join(' + ')}`;
+      el.appendChild(recipeLine);
+
+      const stateLine = document.createElement('div');
+      stateLine.className = 'sel-state';
+      stateLine.textContent = `Estado: ${info.recipeState || '—'}`;
+      el.appendChild(stateLine);
+
+      const outLine = document.createElement('div');
+      outLine.className = 'sel-sub';
+      outLine.textContent = `Salida: ${info.outputBuffer?.count ?? 0}/${info.outputBuffer?.cap ?? 0}`;
+      el.appendChild(outLine);
+
+      for (const row of info.recipeInputs) {
+        const inputLine = document.createElement('div');
+        inputLine.className = 'sel-sub';
+        inputLine.textContent = `${row.name} (${row.sideLabel}): ${row.count}/${row.cap}${row.full ? ' · llena' : ''}`;
+        el.appendChild(inputLine);
+      }
+
+      if (info.recipeHint) {
+        const hint = document.createElement('div');
+        hint.className = 'sel-hint';
+        hint.textContent = info.recipeHint;
+        el.appendChild(hint);
+      }
+    }
     const actions = document.createElement('div');
     actions.className = 'sel-actions';
     if (info.isSembrador) {
@@ -439,7 +469,7 @@ export class Hud {
     const x = document.createElement('button');
     x.textContent = '✕';
     x.title = 'Cerrar';
-    x.addEventListener('click', () => this.showSelection(null));
+    x.addEventListener('click', () => this.cb.onCloseSelection?.());
     actions.appendChild(rm);
     actions.appendChild(x);
     el.appendChild(actions);

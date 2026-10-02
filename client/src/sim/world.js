@@ -372,6 +372,7 @@ export class SimWorld {
       pendingJumbo: false,
       pendingFat: 1,
       pendingCount: 1,
+      outputBlocked: false,
       buffer: [],
       inputBuffers: null,
       recipeInputs: null,
@@ -617,6 +618,7 @@ export class SimWorld {
       const def = TOOLS[e.type];
       // terminó la cocción: escupe el producto por la boca de salida
       e.pending = false;
+      e.outputBlocked = false;
       const m = this.mouthPos(e);
       const count = e.pendingCount || 1;
       for (let k = 0; k < count; k++) {
@@ -631,6 +633,7 @@ export class SimWorld {
         );
         if (!out && this.products.length >= MAX_BODIES) {
           e.paused = true;
+          e.outputBlocked = true;
           break;
         }
       }

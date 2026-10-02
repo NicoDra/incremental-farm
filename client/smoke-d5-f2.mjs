@@ -100,4 +100,44 @@ function steps(sim, n) {
   ok(ham && ham.jumbo === true, 'F2J: ham hereda jumbo en receta industrial');
 }
 
+// ---- 5) ingrediente equivocado no entra y receta queda esperando faltante ----
+{
+  const sim = new SimWorld();
+  ok(sim.placeTool('pienso', 11, 5, 0, 0, 0, now), 'F2E: pienso colocado');
+  const e = sim.tools.get(sim.key(11, 5, 0));
+
+  sim.spawnProduct('corn', e.cx, 0.45, e.cz + 0.35, { x: 0, y: 0, z: -0.6 });
+  const wrong = sim.spawnProduct('pig', e.cx, 0.45, e.cz + 0.35, { x: 0, y: 0, z: -0.6 });
+  steps(sim, 120);
+
+  ok(!!wrong && sim.products.includes(wrong), 'F2E: ingrediente equivocado queda fuera del converter');
+  ok(e.inputBuffers.corn.length >= 1, 'F2E: ingrediente correcto sí entra a su buffer');
+  ok(e.inputBuffers.pumpkin.length === 0, 'F2E: faltante sigue vacío');
+  ok(!e.pending, 'F2E: receta no arranca sin segundo ingrediente');
+}
+
+// ---- 6) capacidad por entrada: cada input corta en su propio cap ----
+{
+  const sim = new SimWorld();
+  ok(sim.placeTool('jamonera_industrial', 12, 7, 0, 0, 0, now), 'F2C: jamonera industrial colocada');
+  const e = sim.tools.get(sim.key(12, 7, 0));
+
+  e.pending = true;
+  e.busyUntil = now + 999999;
+  while (e.buffer.length < CONVERTER_BUFFER_CAP) {
+    e.buffer.push({ timeMs: 999999, jumbo: false, fatMult: 1, count: 1 });
+  }
+  while (e.inputBuffers.pig.length < CONVERTER_BUFFER_CAP) e.inputBuffers.pig.push({ jumbo: false, fatMult: 1 });
+  while (e.inputBuffers.salt.length < CONVERTER_BUFFER_CAP) e.inputBuffers.salt.push({ jumbo: false, fatMult: 1 });
+
+  const pigOverflow = sim.spawnProduct('pig', e.cx, 0.45, e.cz + 0.35, { x: 0, y: 0, z: -0.6 });
+  const saltOverflow = sim.spawnProduct('salt', e.cx + 0.32, 0.45, e.cz, { x: -0.9, y: 0, z: 0 });
+  steps(sim, 90);
+
+  ok(e.inputBuffers.pig.length === CONVERTER_BUFFER_CAP, 'F2C: pig respeta cap por entrada');
+  ok(e.inputBuffers.salt.length === CONVERTER_BUFFER_CAP, 'F2C: salt respeta cap por entrada');
+  ok(!!pigOverflow && sim.products.includes(pigOverflow), 'F2C: pig extra queda fuera cuando input está lleno');
+  ok(!!saltOverflow && sim.products.includes(saltOverflow), 'F2C: salt extra queda fuera cuando input está lleno');
+}
+
 console.log(`\nSMOKE-D5-F2 PASS (${pass} checks)`);

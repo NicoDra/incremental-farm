@@ -8,6 +8,7 @@ import {
   GRID_SIZE,
   LEVELS,
   TOOLS,
+  PRODUCTS,
   DIRS8,
   DIR_NAMES,
   LEVEL_H,
@@ -128,6 +129,7 @@ async function boot() {
     onUpgradeSelected: () => upgradeSelectedInPlace(),
     onPauseToggle: () => togglePauseSelected(),
     onSellGround: () => sellAllGround(),
+    onCloseSelection: () => setSelectionFromEntry(null),
   });
   hud.setHeight(0);
 
@@ -314,6 +316,56 @@ async function boot() {
       ? upgradeInPlaceCost(entry.type, state.owned[entry.type], state.refundRate())
       : 0;
     const isPausable = def.kind === 'producer' || def.kind === 'converter';
+    const recipeInputs = Array.isArray(entry.recipeInputs) && entry.recipeInputs.length
+      ? entry.recipeInputs.slice()
+      : (def.input ? [def.input] : []);
+    const isConverter = def.kind === 'converter';
+    const sideName = (side) => {
+      if (side === 'back') return 'trasera';
+      if (side === 'right') return 'derecha';
+      if (side === 'left') return 'izquierda';
+      return 'frontal';
+    };
+    const inputRows = recipeInputs.map((kind) => {
+      const arr = Array.isArray(entry.inputBuffers?.[kind]) ? entry.inputBuffers[kind] : [];
+      const side = def.inputSides?.[kind] || 'back';
+      return {
+        kind,
+        name: PRODUCTS[kind]?.name || kind,
+        side,
+        sideLabel: sideName(side),
+        count: arr.length,
+        cap: CONVERTER_BUFFER_CAP,
+        full: arr.length >= CONVERTER_BUFFER_CAP,
+      };
+    });
+    const waitingWrong = isConverter && recipeInputs.length > 1 && sim.products.some((p) => {
+      if (recipeInputs.includes(p.kind)) return false;
+      const t = p.body.translation();
+      if (Math.abs(t.x - entry.cx) > 0.72 || Math.abs(t.z - entry.cz) > 0.72 || t.y > entry.baseY + 0.95) return false;
+      const v = p.body.linvel();
+      return Math.hypot(v.x, v.y, v.z) <= 2.2;
+    });
+    const outputQ = Array.isArray(entry.buffer) ? entry.buffer.length : 0;
+    const outputCap = CONVERTER_BUFFER_CAP;
+    const missing = inputRows.filter((r) => r.count <= 0);
+    let recipeState = null;
+    let recipeHint = null;
+    if (isConverter) {
+      if (entry.paused) recipeState = 'Pausada';
+      else if (entry.outputBlocked) recipeState = 'Salida bloqueada';
+      else if (entry.pending) recipeState = 'Produciendo';
+      else if (recipeInputs.length > 1 && missing.length) {
+        const first = missing[0];
+        recipeState = 'Esperando ingredientes';
+        recipeHint = waitingWrong
+          ? `Ingrediente equivocado. Esperando ${first.name} en entrada ${first.sideLabel}.`
+          : `Esperando ${first.name} en entrada ${first.sideLabel}.`;
+      }
+      else if (outputQ >= outputCap) recipeState = 'Buffer de salida lleno';
+      else if (outputQ > 0) recipeState = 'Lista para producir';
+      else recipeState = 'Sin insumos';
+    }
     return {
       key: sim.key(entry.i, entry.j, entry.h),
       type: entry.type,
@@ -331,6 +383,10 @@ async function boot() {
       canAffordUpgradeInPlace: canUpgradeInPlace && state.money >= upgradeCost,
       isPausable,
       isPaused: Boolean(entry.paused),
+      recipeInputs: inputRows,
+      outputBuffer: { count: outputQ, cap: outputCap },
+      recipeState,
+      recipeHint,
     };
   }
 
@@ -1271,6 +1327,12 @@ async function boot() {
       steps++;
     }
     if (steps === 3) acc = 0;
+
+    if (!mode && selectedKey) {
+      const e = sim.tools.get(selectedKey);
+      if (e) hud.showSelection(entryInfo(e));
+      else setSelectionFromEntry(null);
+    }
 
     updateCamera(dt);
     view.controls.update();
