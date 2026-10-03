@@ -1,5 +1,5 @@
-// Bots de balance. Solo leen/actuan sobre el estado; la sim corre igual.
-import { UPGRADE_LINES, upgradeCost, TOOLS } from 'chanchos-shared';
+// Bots de balance. Solo leen/actúan sobre el estado; la sim corre igual.
+import { UPGRADE_LINES, upgradeCost } from 'chanchos-shared';
 
 // Sembrador inicial del juego (mismas coordenadas que STARTER en game/state.js).
 const STARTER = { type: 'sembrador', i: 8, j: 5, h: 0, rot8: 0, pitchDeg: 0 };
@@ -48,9 +48,6 @@ export class BotBase {
     if (r.ok) this.sim.setModifiers(this.state.simModifiers());
     return r.ok;
   }
-  // teleport lo removí del loop base: la línea de medida es fíbnea real.
-  // Si no hay física al portal, se reporta casualmente ("sin entregas" y el
-  // bloqueo por cap/velocidad que revela el juego, no el artefacto del mouse).
   tryLevelUp() {
     if (this.state.buyLevel()) {
       this.sim.setModifiers(this.state.simModifiers());
@@ -63,12 +60,11 @@ export class BotBase {
   }
 }
 
-// Perezosa: línea mínima solo maíz (starter + recta + fan + segunda recta).
-// El simulador teletransporta el producto al portal para medir ingresos.
+// Perezosa: línea mínima solo maíz, sin kick. El maíz no llega al portal al
+// tier base (fricción + distancia) y eso se mide: sin entregas, la economía
+// queda taponada por el cap.
 export class BotPerezosa extends BotBase {
   setup() {
-    // starter del juego (el panel lo coloca vía placeFree): lo pongo igual y
-    // después agrego la línea con boca N que alimenta la ruta al portal.
     this.place('sembrador', STARTER.i, STARTER.j, 0, STARTER.rot8);
     this.place('recta', 8, 4, 0, 0);
     this.place('fan', 8, 3, 0, 0);
@@ -82,9 +78,24 @@ export class BotPerezosa extends BotBase {
   }
 }
 
+// PerezosaExploit: línea física que sí entrega (sembrador al N, fan tier 1 al
+// N del borde del paso, y salta por el fan a un tramo utilizado). Sin kick.
+export class BotPerezosaExploit extends BotBase {
+  setup() {
+    this.place('sembrador', STARTER.i, STARTER.j, 0, STARTER.rot8);
+    this.place('fan', 8, 3, 0, 0);
+    this.place('recta', 8, 2, 0, 0);
+  }
+  step(dt, nowMs) {
+    this.nowMs = nowMs;
+    this.emitManual(STARTER.i, STARTER.j);
+    this.upgradeCheapest();
+    this.tryLevelUp();
+  }
+}
+
 // Con limpieza: misma línea que Perezosa + vende lo suelto cada 60 s (como el
-// jugador que hace clic en "vender suelo"; para medir si el tope se debiera a
-// mala administración o tranca real).
+// jugador que hace clic; para medir si el tope se debe a mala administración).
 export class BotConLimpieza extends BotPerezosa {
   constructor(sim, state, watch) {
     super(sim, state, watch);
@@ -93,20 +104,18 @@ export class BotConLimpieza extends BotPerezosa {
   step(dt, nowMs) {
     if (nowMs - this.lastClean >= 60_000) {
       this.lastClean = nowMs;
-      // liquidar suelo: cobra la regla del juego (LIQUIDATION_RATE 25 %).
       for (const p of [...this.sim.products]) {
         const t = p.body.translation();
         const v = this.state.liquidateValue(p.kind, { jumbo: p.jumbo, fatMult: p.fatMult });
         this.sim.removeProduct(this.sim.products.indexOf(p));
-        this.state.registerLiquidation(p.kind, nowMs, v);
+        this.state.registerLiquidation(p.kind, nowMs, v, true);
       }
     }
     super.step(dt, nowMs);
   }
 }
 
-// Basura: emisores apuntando al suelo, sin circuito. Mide cuánto ingreso da
-// solo liquidar lo que cae al suelo (transmite manual cada ciclo).
+// Basura: emisores apuntando al suelo, sin circuito. Solo auto-liquidación.
 export class BotBasura extends BotBase {
   setup() {
     this.place('sembrador', 6, 5, 0, 0);
@@ -122,25 +131,19 @@ export class BotBasura extends BotBase {
   }
 }
 
-// Completa: dos cadenas diseñadas.
-//  - Línea W: sembrador → fan → pienso (recibe maíz atras, sale al portal).
-//  - Línea E: sembrador → fan → corral (maíz → cerdo) y salinera + industrial al
-//    pasar a Piedra; silo antes de procesar.
+// Completa: cadena compuesta validada físicamente (starter al N con fan y
+// recta + corral E→W hacia la industrial, salinera al E soplando al O).
 export class BotCompleta extends BotBase {
   setup() {
-    // starter del juego + línea A (maíz crudo).
     this.place('sembrador', STARTER.i, STARTER.j, 0, STARTER.rot8);
     this.place('recta', 8, 4, 0, 0);
-    this.place('recta', 8, 3, 0, 0);
-    this.place('fan', 8, 2, 0, 0);
-    // Línea B (calabaza cruda): calabacera → recta N → fan N → portal.
-    this.place('calabacera', 6, 4, 0, 0);
-    this.place('recta', 6, 3, 0, 0);
-    this.place('fan', 6, 2, 0, 0);
-    // M1.5-F5: entradas por costado. El starter (maíz, r0 al N) entra por la
-    // izquierda del pienso; la calabacera (r6, sale O) entra por la derecha.
-    this.place('pienso', 7, 4, 0, 2); // sale E, maíz O, calabaza S (trasera r2)
+    this.place('fan', 8, 3, 0, 0);
+    this.place('recta', 8, 2, 0, 0);
+    this.place('pienso', 7, 4, 0, 2);
     this.place('recta', 7, 3, 0, 0);
+    this.place('calabacera', 6, 4, 0, 0);
+    this.place('corral', 11, 4, 0, 2);
+    this.place('jamonera', 12, 4, 0, 2);
   }
   step(dt, nowMs) {
     this.nowMs = nowMs;
@@ -155,10 +158,9 @@ export class BotCompleta extends BotBase {
     for (const id of priority) {
       this.state.canApplyUpgrade(id).ok && this.upgrade(id);
     }
-    // al subir a Piedra abre silo + jamonera industrial en la línea E.
     if (this.state.level >= 2 && !this.placed.has('ind')) {
-      const okSil = this.place('silo', 11, 4, 0, 2);
-      const okInd = this.place('jamonera_industrial', 13, 4, 0, 2);
+      const okSil = this.place('silo', 9, 4, 0, 0);
+      const okInd = this.place('jamonera_industrial', 10, 4, 0, 0);
       if (okSil || okInd) this.placed.add('ind');
     }
     this.tryLevelUp();

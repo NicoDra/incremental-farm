@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-03T02:57:40.990Z",
+  "generatedAt": "2026-10-03T05:48:16.513Z",
   "seed": 42,
   "durationMin": 60,
   "deterministic": true,
@@ -14,6 +14,15 @@
       "autoLiquidation": 1095,
       "manualLiquidationUnits": 0,
       "autoLiquidationUnits": 1095,
+      "deliveriesPerMin": 1.8,
+      "incomePerMin": 9.33,
+      "byPlace": {
+        "ground": 108,
+        "channel": 12,
+        "converterFront": 0,
+        "siloMouth": 0,
+        "blockedProducer": 0
+      },
       "bodiesAtEnd": 120,
       "stuckTicks": 116,
       "capHitAtPct": 0.03333796296296631,
@@ -27,29 +36,64 @@
       ]
     },
     {
-      "name": "Completa",
-      "finalLevel": "Granja de Piedra S.A.",
-      "finalMoney": 283,
-      "deliveredPortal": 247,
-      "portalIncome": 1598,
+      "name": "PerezosaExploit",
+      "finalLevel": "Granero de Madera S.A.",
+      "finalMoney": 727,
+      "deliveredPortal": 11,
+      "portalIncome": 61,
       "manualLiquidation": 0,
-      "autoLiquidation": 893,
+      "autoLiquidation": 1064,
       "manualLiquidationUnits": 0,
-      "autoLiquidationUnits": 893,
-      "bodiesAtEnd": 120,
+      "autoLiquidationUnits": 1064,
+      "deliveriesPerMin": 0.18,
+      "incomePerMin": 1.02,
+      "byPlace": {
+        "ground": 110,
+        "channel": 5,
+        "converterFront": 0,
+        "siloMouth": 0,
+        "blockedProducer": 0
+      },
+      "bodiesAtEnd": 115,
       "stuckTicks": 116,
       "capHitAtPct": 0.03333796296296631,
-      "upgradesPurchased": 6,
+      "upgradesPurchased": 4,
       "milestones": [
         {
-          "atMin": 10.8,
+          "atMin": 17.1,
           "money": 0,
           "msg": "sube a Granero de Madera S.A."
-        },
+        }
+      ]
+    },
+    {
+      "name": "Completa",
+      "finalLevel": "Granero de Madera S.A.",
+      "finalMoney": 1210,
+      "deliveredPortal": 101,
+      "portalIncome": 512,
+      "manualLiquidation": 0,
+      "autoLiquidation": 1106,
+      "manualLiquidationUnits": 0,
+      "autoLiquidationUnits": 1106,
+      "deliveriesPerMin": 1.68,
+      "incomePerMin": 8.53,
+      "byPlace": {
+        "ground": 105,
+        "channel": 13,
+        "converterFront": 0,
+        "siloMouth": 0,
+        "blockedProducer": 0
+      },
+      "bodiesAtEnd": 118,
+      "stuckTicks": 116,
+      "capHitAtPct": 0.03333796296296631,
+      "upgradesPurchased": 4,
+      "milestones": [
         {
-          "atMin": 48.3,
-          "money": 0,
-          "msg": "sube a Granja de Piedra S.A."
+          "atMin": 12.6,
+          "money": 1,
+          "msg": "sube a Granero de Madera S.A."
         }
       ]
     },
@@ -63,6 +107,15 @@
       "autoLiquidation": 0,
       "manualLiquidationUnits": 5722,
       "autoLiquidationUnits": 0,
+      "deliveriesPerMin": 1.03,
+      "incomePerMin": 7.93,
+      "byPlace": {
+        "ground": 86,
+        "channel": 10,
+        "converterFront": 0,
+        "siloMouth": 0,
+        "blockedProducer": 0
+      },
       "bodiesAtEnd": 96,
       "stuckTicks": 0,
       "capHitAtPct": null,
@@ -90,6 +143,15 @@
       "autoLiquidation": 1127,
       "manualLiquidationUnits": 0,
       "autoLiquidationUnits": 1127,
+      "deliveriesPerMin": 0.08,
+      "incomePerMin": 0.25,
+      "byPlace": {
+        "ground": 98,
+        "channel": 0,
+        "converterFront": 0,
+        "siloMouth": 0,
+        "blockedProducer": 0
+      },
       "bodiesAtEnd": 98,
       "stuckTicks": 116,
       "capHitAtPct": 0.03333796296296631,

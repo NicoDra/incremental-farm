@@ -60,5 +60,24 @@
 - Demo completa de ~35-40 min: Barro 3-4 min, Madera 6-8, Piedra 8-10, Fábrica 10+ con sumideros de dinero.
 - Hoy las edades se pasan demasiado rápido: subir de edad no debe resolverse solo con dinero (ver requisitos de entrega por producto).
 
+## Registro J1 (primera pasada de balance, valores de arranque)
+- `START_MONEY = 75`, `LIQUIDATION_RATE = 0.10`, `AUTO_LIQUIDATE_RATE = 0`, `AUTO_LIQUIDATE_SECONDS = 90`, `BULK_LIQUIDATION_COOLDOWN_MS = 30000`, `COMBO_LIQUIDATION_PENALTY = 0.25`.
+- Costes de edad: Madera 800, Piedra 5500, Fábrica 28000.
+- Objetivos de entrega por edad (solo cuentan entregas al portal): Madera 30 maíz + 20 calabaza + 20 palomita; Piedra 15 cerdos + 10 pienso.
+- TOSS (`tossPig`) quedó como código muerto: se elimina junto con su referencia en smokes.
+
+## Registro J1c (tope de combo por edad)
+- `COMBO_MAX_BY_AGE = [2, 3, 4, 5]` (Barro, Madera, Piedra, Fábrica). El paso (0.1) y la ventana (3 s) no cambian; la mejora "ventana de combo" del portal sigue funcionando igual.
+- Si se cambian estos topes, los costos de edad hay que recalibrar con la partida real (la penalidad de liquidación queda igual).
+- El indicador muestra actual / máximo (`COMBO x1.4 / máx x2`) y el panel de Edad anuncia el valor de la próxima.
+
+## Mejoras generales (a evaluar en el refinado, después de la partida de prueba)
+- Mejora general de aguante del combo: más tiempo de ventana antes de apagarse, no atada a una estructura (hoy existe como línea del portal).
+
+## Reglas de calibración
+- Nueva fórmula: `costo_nuevo = costo_actual × (tiempo objetivo ÷ tiempo medido en partida real)`.
+- Los bots del simulador (runBalance) sirven solo como regresión física y detección de bloqueos, no para calibrar los valores de la economía.
+- Agujero de entregas que crece con metas progresivas (estilo Project Pitt): descartado por ahora.
+
 ## Herramienta
-- Simulador headless (ver M1.5-H).
+- Simulador headless (ver M1.5-H / H2 / H3 / H4).

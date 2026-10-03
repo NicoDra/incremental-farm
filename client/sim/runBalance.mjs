@@ -6,7 +6,7 @@ import { SimWorld } from '../src/sim/world.js';
 import { setSimSeed } from '../src/sim/seed.js';
 import { GameState } from '../src/game/state.js';
 import { SimWatch } from './watch.js';
-import { BotPerezosa, BotCompleta, BotConLimpieza, BotBasura } from './bots/balanceBots.js';
+import { BotPerezosa, BotPerezosaExploit, BotCompleta, BotConLimpieza, BotBasura } from './bots/balanceBots.js';
 import { AUTO_LIQUIDATE_MS, DELIVERY_Z } from 'chanchos-shared';
 
 const SEED = 42;
@@ -89,6 +89,7 @@ let now = 0;
 const results = [];
 for (const [BotClass, label] of [
   [BotPerezosa, 'Perezosa'],
+  [BotPerezosaExploit, 'PerezosaExploit'],
   [BotCompleta, 'Completa'],
   [BotConLimpieza, 'ConLimpieza'],
   [BotBasura, 'Basura'],
@@ -100,10 +101,11 @@ for (const [BotClass, label] of [
   const stuckTicks = rows.filter((row) => row.convertersStuck + row.producersPaused > 0).length;
 
   console.log(`\n=== ${r.name} ===`);
-  console.log(`${'min'.padStart(5)} ${'edad'.padEnd(14)} ${'dinero'.padStart(7)} ${'portal'.padStart(6)} ${'liqManual'.padStart(9)} ${'liqAuto'.padStart(7)} ${'cuerpos'.padStart(7)} ${'bloq'.padStart(4)}`);
-  for (const row of rows.filter((_, idx) => idx % 2 === 0)) {
+  console.log(`${'min'.padStart(5)} ${'edad'.padEnd(14)} ${'dinero'.padStart(9)} ${'ent/min'.padStart(8)} ${'unid/$'.padStart(14)} ${'suelo'.padStart(5)}/${'canal'.padStart(4)} ${'bloq'.padStart(4)}`);
+  for (const row of rows.filter((_, idx) => idx % 5 === 0)) {
+    const entMin = row.incomePerMin >= 0 ? Math.round(row.delivered / Math.max(0.1, row.t / 60000) * 100) / 100 : 0;
     console.log(
-      `${String((row.t / 60000).toFixed(1)).padStart(5)} ${row.levelName.padEnd(14)} ${String(row.money).padStart(7)} ${String(row.delivered).padStart(6)} ${String(row.liquidatedManualUnits ?? 0).padStart(9)} ${String(row.liquidatedAutoUnits ?? 0).padStart(7)} ${String(row.bodies).padStart(7)} ${String(row.silosFull + row.convertersStuck + row.producersPaused).padStart(4)}`,
+      `${String((row.t / 60000).toFixed(1)).padStart(5)} ${row.levelName.padEnd(14)} ${String(row.money).padStart(9)} ${String(entMin).padStart(8)} ${(row.liquidatedManualUnits + '/' + row.liquidatedManualIncome).padStart(14)} ${String(row.byPlace?.ground ?? 0).padStart(5)}/${String(row.byPlace?.channel ?? 0).padStart(4)} ${String(row.silosFull + row.convertersStuck + row.producersPaused).padStart(4)}`,
     );
   }
   console.log('hitos por edad:');
@@ -126,6 +128,9 @@ for (const [BotClass, label] of [
     autoLiquidation: r.state.liquidatedAutoValue || 0,
     manualLiquidationUnits: r.state.liquidatedManualCount || 0,
     autoLiquidationUnits: r.state.liquidatedAutoCount || 0,
+    deliveriesPerMin: Math.round(r.state.delivered / (SIM_MS / 60000) * 100) / 100,
+    incomePerMin: Math.round(r.portalTotal / (SIM_MS / 60000) * 100) / 100,
+    byPlace: r.endBreakdown.byPlace,
     bodiesAtEnd: r.endBreakdown.total,
     stuckTicks,
     capHitAtPct: capRow ? capRow.t / SIM_MS : null,
