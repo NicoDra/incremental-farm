@@ -240,28 +240,7 @@ export class SimWorld {
     return p;
   }
 
-  // Acción activa: lanzar un cerdito a mano desde el borde oeste
-  // M1.5-B: DEPRECADO (el lanzamiento libre se elimina; queda por compat
-  // para el smoke test hasta que el agente UI quite el botón).
-  tossPig() {
-    const z = -6 + Math.random() * 12;
-    const p = this.spawnProduct('pig', -7, 1.7, z, {
-      x: 4.6,
-      y: 2.4,
-      z: (Math.random() - 0.5) * 2,
-    });
-    if (p) {
-      p.body.setAngvel(
-        {
-          x: (Math.random() - 0.5) * 8,
-          y: (Math.random() - 0.5) * 8,
-          z: (Math.random() - 0.5) * 8,
-        },
-        true,
-      );
-    }
-    return p;
-  }
+  // M1.5-J1: el lanzamiento libre de cerditos se eliminó del juego y del test.
 
   fixedBody(x, y, z, quat) {
     const desc = RAPIER.RigidBodyDesc.fixed().setTranslation(x, y, z);

@@ -373,6 +373,61 @@ button {
   color: #1c3e2a;
 }
 
+/* M1.5-J1: widget de objetivo con barras por producto (dinero + entregas). */
+.goal-box {
+  position: absolute;
+  top: 4.2rem;
+  right: 0.6rem;
+  max-width: min(24rem, 70vw);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #1c3e2a;
+  z-index: 8;
+  pointer-events: auto;
+  box-shadow: 0 4px 0 rgba(43, 30, 20, 0.18);
+}
+.goal-box h4 {
+  margin: 0 0 0.2rem 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  color: #2b1e14;
+}
+.goal-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.35rem;
+  align-items: center;
+  margin: 0.16rem 0;
+  font-size: 0.68rem;
+}
+.goal-row progress {
+  width: 100%;
+  height: 0.55rem;
+  border-radius: 0.2rem;
+  overflow: hidden;
+  accent-color: #4a9e94;
+  appearance: none;
+}
+.goal-row progress::-webkit-progress-bar { background: #efe4d0; }
+.goal-row progress::-webkit-progress-value { background: #4a9e94; }
+.goal-row.done { color: #1c6e3c; }
+.goal-btn {
+  margin-top: 0.25rem;
+  width: 100%;
+  font-weight: 800;
+  font-size: 0.7rem;
+  border: 2px solid var(--ink);
+  border-radius: 0.4rem;
+  padding: 0.2rem 0;
+  background: var(--paper);
+  cursor: pointer;
+}
+.goal-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
 #sel-panel .sel-hint {
   font-size: 0.7rem;
   line-height: 1.25;

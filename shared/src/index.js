@@ -514,10 +514,14 @@ export const GROUND_IDLE_DESPAWN_MS = 20000;
 // M1.5-H3: regla de liquidación. Liquidar = venta por clic / vender el suelo.
 // Auto-liquidación = cuerpos quietos en el suelo (sin canaleta encima) a los
 // AUTO_LIQUIDATE_SECONDS. Paga menos: menos % del valor base en ambas.
-export const LIQUIDATION_RATE = 0.25; // venta manual por clic o "vender todo el suelo"
+export const LIQUIDATION_RATE = 0.10; // venta manual por clic o "Liquidar el suelo"
+export const BULK_LIQUIDATION_COOLDOWN_MS = 30_000; // cooldown de Liquidar el suelo
 export const AUTO_LIQUIDATE_SECONDS = 90;
-export const AUTO_LIQUIDATE_RATE = 0.10; // pago automático por tiempo quieto
+export const AUTO_LIQUIDATE_RATE = 0; // liquidación automática: nada de pago
 export const AUTO_LIQUIDATE_MS = AUTO_LIQUIDATE_SECONDS * 1000;
+// M1.5-J1: cada unidad liquidada manualmente resta este valor al combo actual
+// (sin bajar de 1.0). Las entregas por el portal no se ven afectadas.
+export const COMBO_LIQUIDATION_PENALTY = 0.25;
 
 // Nombre interno: CHANGO recogida stock = el comunicador ya existente.
 
@@ -596,18 +600,39 @@ export function toolCost(type, owned) {
   return Math.ceil(TOOLS[type].base * Math.pow(1.15, owned));
 }
 
+// M1.5-J1: valores de arranque de la primera pasada de balance.
 export const LEVELS = [
   { name: 'Corral de Barro S.A.', mult: 1, cost: 0, slogan: 'La honestidad empieza en el barro.' },
-  { name: 'Granero de Madera S.A.', mult: 1.6, cost: 200, slogan: 'Ahora con paredes que se ven pro.' },
-  { name: 'Granja de Piedra S.A.', mult: 2.6, cost: 1600, slogan: 'Prestigio mineral, precios inflados.' },
-  { name: 'Fábrica Chanchos S.A.', mult: 4, cost: 12800, slogan: 'Sinergia porcina integral certificada.' },
+  { name: 'Granero de Madera S.A.', mult: 1.6, cost: 800, slogan: 'Ahora con paredes que se ven pro.' },
+  { name: 'Granja de Piedra S.A.', mult: 2.6, cost: 5500, slogan: 'Prestigio mineral, precios inflados.' },
+  { name: 'Fábrica Chanchos S.A.', mult: 4, cost: 28000, slogan: 'Sinergia porcina integral certificada.' },
 ];
 
-export const TOSS = { cost: 5, cooldownMs: 2500 };
+// M1.5-J1: metas de entrega por edad. Solo cuenta lo entregado por el portal
+// (no liquidaciones), y cada edad exige su dinero y sus cantidades juntas.
+// Cada meta solo pide lo que ya se puede producir con las piezas de esa edad.
+export const AGE_GOALS = [
+  null, // Barro: sin meta (primera transición solo pide choclo)
+  [{ kind: 'corn', count: 30 }], // Barro → Madera
+  [{ kind: 'pumpkin', count: 20 }, { kind: 'popcorn', count: 20 }], // Madera → Piedra
+  [{ kind: 'pig', count: 15 }, { kind: 'feed', count: 10 }], // Piedra → Fábrica
+];
+
+export function ageGoal(age) {
+  if (age <= 0 || age >= AGE_GOALS.length) return null;
+  return AGE_GOALS[age];
+}
+
 // M1.5-C: reembolso de demolición. Barro = 100%, desde Madera = 75%.
 export const REFUND_RATE_CLAY = 1.0;
 export const REFUND_RATE_POST_CLAY = 0.75;
 export const COMBO = { windowMs: 3000, step: 0.1, max: 5 };
+// M1.5-J1c: tope del combo por edad. El paso (0.1) y la ventana (3 s) no cambian.
+export const COMBO_MAX_BY_AGE = [2, 3, 4, 5]; // Barro, Madera, Piedra, Fábrica
+export function comboMaxForAge(age) {
+  const t = Math.max(0, Math.min(age || 0, COMBO_MAX_BY_AGE.length - 1));
+  return COMBO_MAX_BY_AGE[t];
+}
 // M1.5-B: edades = índice de LEVELS. Cada edad desbloquea herramientas,
 // productos y un tier de ventilador. Paleta visual por edad.
 export const AGES = [
@@ -705,7 +730,7 @@ export const SEMBRADOR_MANUAL_COOLDOWN_MS = 800;
 export const HAM_GLOBAL_PER_UNIT = 0.05; // cada jamonera colocada: +5% ingresos
 export const MAX_BODIES = 120;
 export const RECYCLE_MS = 20000; // producto dormido mucho tiempo se recicla al 50%
-export const START_MONEY = 50;
+export const START_MONEY = 75;
 export const JAM_MS = 2500; // tiempo quieto antes de marcar atasco
 export const FLOAT_COMBINE_WINDOW_MS = 500; // ventana para sumar floats "+$" en un único texto
 

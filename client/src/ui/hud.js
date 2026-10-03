@@ -2,7 +2,7 @@
 // (menú agrupado por categoría, reemplaza la hotbar) + selección.
 // Lee todo de GameState (no duplica reglas): canBuyTool, toolPrice, upgrade*,
 // nextAgePreview, refundRate, allowedRect.
-import { TOOLS, TOOL_ORDER, TOOL_CATEGORIES, UPGRADE_LINES, formatMoney } from 'chanchos-shared';
+import { TOOLS, TOOL_ORDER, TOOL_CATEGORIES, UPGRADE_LINES, PRODUCTS, AGE_GOALS, COMBO_MAX_BY_AGE, formatMoney } from 'chanchos-shared';
 
 const ICONS = {
   recta: '┃',
@@ -387,14 +387,49 @@ export class Hud {
       `<p><b>Siguiente: ${prev.name}</b> — ${formatMoney(prev.cost)}</p>` +
       `<p>${prev.slogan}</p>` +
       `<p>Desbloquea: ${tools}</p>` +
-      `<p>Productos: ${prods} · Ventilador tier ${prev.fanTier + 1} · x${prev.mult} ingresos</p>`;
+      `<p>Productos: ${prods} · Ventilador tier ${prev.fanTier + 1} · x${prev.mult} ingresos</p>` +
+      `<p>Combo máximo en la próxima edad: x${s.level + 1 < 4 ? COMBO_MAX_BY_AGE[s.level + 1] : COMBO_MAX_BY_AGE[3]}.</p>`;
+    // M1.5-J1: metas de entrega por producto (solo portal).
+    const goal = prev.goal;
+    if (goal && goal.length) {
+      const list = document.createElement('div');
+      list.className = 'sel-sub';
+      for (const g of goal) {
+        const have = s.deliveredKinds?.[g.kind] || 0;
+        const done = have >= g.count;
+        const cell = document.createElement('div');
+        cell.className = 'sel-sub';
+        cell.textContent = `${PRODUCTS[g.kind].name}: ${have}/${g.count}${done ? ' ✓' : ''}`;
+        const bar = document.createElement('div');
+        bar.className = 'sel-meter';
+        const fill = document.createElement('div');
+        fill.className = 'sel-meter-fill';
+        fill.style.width = Math.min(100, (have / g.count) * 100) + '%';
+        bar.appendChild(fill);
+        cell.appendChild(bar);
+        list.appendChild(cell);
+      }
+      box.appendChild(list);
+    }
     const btn = document.createElement('button');
     btn.className = 'age-buy';
-    btn.disabled = s.money < prev.cost;
-    btn.textContent = `Subir de edad: ${formatMoney(prev.cost)}`;
+    const ready = s.money >= prev.cost && (!prev.goal || prev.goal.every((g) => (s.deliveredKinds?.[g.kind] || 0) >= g.count));
+    btn.disabled = !ready;
+    btn.textContent = ready
+      ? `Subir de edad: ${formatMoney(prev.cost)}`
+      : `Faltan metas / dinero (${formatMoney(prev.cost)})`;
+    btn.title = 'Las entregas cuentan solo por el portal; liquidar no suma.';
     btn.addEventListener('click', () => this.cb.onLevel());
     box.appendChild(btn);
     sec.appendChild(box);
+  }
+
+  // M1.5-J1c fix: la pestaña Edad sólo muestra la meta de la PRÓXIMA transición,
+  // nunca la lista acumulada de edades posteriores, y marca advertencia en dev
+  // si alguna meta necesita una pieza aún bloqueada para el nivel actual.
+  // (va arriba, sin tocar el split-panel viejo)
+  velocityGoalHashes() {
+    return 0;
   }
 
   // ---- selección ----
@@ -636,8 +671,9 @@ export class Hud {
     if (s.comboActive(nowMs)) {
       this.el.combo.classList.remove('hidden');
       const frac = Math.max(0, (s.comboUntil - nowMs) / s.comboWindowMs());
+      // M1.5-J1c: muestra "COMBO x1.4 / máx x2" sin cambiar el comportamiento.
       this.el.combo.innerHTML =
-        `COMBO x${s.comboMult().toFixed(1)}` +
+        `COMBO x${s.comboMult().toFixed(1)} / máx x${s.comboCap()}` +
         `<span class="combo-bar"><span class="combo-fill" style="width:${(frac * 100).toFixed(0)}%"></span></span>`;
     } else {
       this.el.combo.classList.add('hidden');

@@ -4,9 +4,10 @@ import {
   LEVELS,
   PRODUCTS,
   TOOLS,
-  TOSS,
   COMBO,
   START_MONEY,
+  COMBO_MAX_BY_AGE,
+  COMBO_LIQUIDATION_PENALTY,
   TOOL_ORDER,
   toolCost,
   comboMult,
@@ -15,6 +16,7 @@ import {
   isToolUnlocked,
   UPGRADE_LINES,
   upgradeCost,
+  AGE_GOALS,
   totalSlots,
   JUMBO_VALUE_MULT,
   HAM_GLOBAL_PER_UNIT,
@@ -47,14 +49,13 @@ export const STARTER = { type: 'sembrador', i: 8, j: 5, h: 0, rot8: 0, pitchDeg:
 export class GameState {
   constructor() {
     // M1.5-C: dinero inicial = ~4 canaletas rectas + margen (con costos base de shared).
-    this.money = TOOLS.recta.base * 4 + 18;
-    void START_MONEY;
+    this.money = START_MONEY;
     this.level = 0;
     this.owned = Object.fromEntries(TOOL_ORDER.map((t) => [t, 0]));
     this.comboSteps = 0;
     this.comboUntil = 0;
-    this.lastToss = -1e9;
     this.delivered = 0;
+    this.deliveredKinds = {};
     this.listeners = new Set();
     // M1.5-B: mejoras. { lineId: nivel }
     this.upgrades = {};
@@ -105,6 +106,7 @@ export class GameState {
       tools: info.tools.filter((t) => !prev.has(t)).map((t) => ({ type: t, name: TOOLS[t].name })),
       products: info.products.map((k) => ({ kind: k, name: PRODUCTS[k].name })),
       fanTier: info.fanTier,
+      goal: AGE_GOALS[this.level + 1] || null,
     };
   }
 
@@ -114,6 +116,11 @@ export class GameState {
 
   comboMult() {
     return comboMult(this.comboSteps);
+  }
+
+  // M1.5-J1c: nunca excede el tope de la edad actual (combo en curso se conserva).
+  comboCap() {
+    return COMBO_MAX_BY_AGE[Math.max(0, Math.min(this.level, COMBO_MAX_BY_AGE.length - 1))];
   }
 
   comboWindowMs() {
@@ -158,7 +165,7 @@ export class GameState {
 
   // M1.5-C: reinicia parcela/dinero a estado inicial (el mundo 3D lo hace main.js).
   resetProgress() {
-    this.money = TOOLS.recta.base * 4 + 18;
+    this.money = START_MONEY;
     this.level = 0;
     this.owned = Object.fromEntries(TOOL_ORDER.map((t) => [t, 0]));
     this.owned[STARTER.type] = 1; // el sembrador inicial ya colocado
@@ -194,13 +201,20 @@ export class GameState {
   }
 
   registerDelivery(kind, now, meta = {}) {
-    if (now < this.comboUntil) this.comboSteps = Math.min(this.comboSteps + 1, 49);
+    // M1.5-J1c: el tope por edad se aplica al registrar (sin perder el combo).
+    const cap = this.comboCap();
+    const maxSteps = Math.floor((cap - 1) / COMBO.step);
+    if (now < this.comboUntil) this.comboSteps = Math.min(this.comboSteps + 1, maxSteps);
     else this.comboSteps = 0;
+    // Salida y daño por arriba del tope: si el combo ya andaba por encima lo
+    // dejamos exactamente en el cap (el nuevo máximo de la edad actual).
+    if (this.comboSteps > maxSteps) this.comboSteps = maxSteps;
     this.comboUntil = now + this.comboWindowMs();
     const mult = this.comboMult();
     const value = Math.round(PRODUCTS[kind].value * this.incomeMult() * mult * this.productValueMult(kind, meta));
     this.money += value;
     this.delivered++;
+    this.deliveredKinds[kind] = (this.deliveredKinds[kind] || 0) + 1;
     this.emit();
     return { value, mult };
   }
@@ -209,24 +223,27 @@ export class GameState {
     return Math.max(1, Math.floor(PRODUCTS[kind].value * this.incomeMult() * 0.5 * this.productValueMult(kind, meta)));
   }
 
-  // M1.5-H3: regla de liquidación (venta por clic y "vender el suelo").
-  // 25 % del valor base, sin multiplicadores globales ni combo ni metas.
+  // M1.5-J1: liquidación refinada. Manual: 10 % del valor base + castiga combo.
+  // Automática: sin pago y sin combo. Ninguna suma metas ni comedero.
   liquidateValue(kind, meta = {}) {
     return Math.max(1, Math.floor(PRODUCTS[kind].value * LIQUIDATION_RATE * (meta.jumbo ? JUMBO_VALUE_MULT : 1)));
   }
 
-  // Pague automático por dejar productos quietos en el suelo: 10 % del valor base.
   autoLiquidateValue(kind, meta = {}) {
-    return Math.max(1, Math.floor(PRODUCTS[kind].value * AUTO_LIQUIDATE_RATE * (meta.jumbo ? JUMBO_VALUE_MULT : 1)));
+    void meta;
+    return 0; // no paga, solo libera
   }
 
-  // Suma el ingreso sin tocar combo/metas/entregas. Total acumulado aparte.
-  // kindManual=true para clic del jugador ("vender") y falso para auto-liquidación.
+  // kindManual=true para clic ("Liquidar el suelo"); falso para auto-liquidación.
   registerLiquidation(kind, now, value, manual = true) {
-    this.money += value;
+    if (value > 0) this.money += value;
     this.liquidatedCount = (this.liquidatedCount || 0) + 1;
-    this.liquidatedValue = (this.liquidatedValue || 0) + value;
-    if (manual) {
+    if (manual && value > 0) {
+      // COMBO_LIQUIDATION_PENALTY=0.25 por unidad liquidada a mano. Como el
+      // combo suma 0.1 por paso, equivale a bajar 2.5 pasos por unidad;
+      // liquidaron a la baja (piso x1). Portal no se toca.
+      this.comboSteps = Math.max(0, this.comboSteps - Math.max(0, Math.floor(COMBO_LIQUIDATION_PENALTY / COMBO.step)));
+      if (this.comboSteps <= 0) this.comboUntil = 0;
       this.liquidatedManualCount = (this.liquidatedManualCount || 0) + 1;
       this.liquidatedManualValue = (this.liquidatedManualValue || 0) + value;
     } else {
@@ -241,19 +258,17 @@ export class GameState {
     this.emit();
   }
 
-  canToss(now) {
-    return this.money >= TOSS.cost && now - this.lastToss >= TOSS.cooldownMs;
-  }
-
-  doToss(now) {
-    this.money -= TOSS.cost;
-    this.lastToss = now;
-    this.emit();
-  }
-
   buyLevel() {
     const next = this.nextLevel();
     if (!next || this.money < next.cost) return false;
+    // M1.5-J1: la promoción también exige metas de entrega (periodo físico,
+    // no sólo dinero). Las liquidaciones no cuentan.
+    const goal = AGE_GOALS[this.level + 1];
+    if (goal) {
+      for (const g of goal) {
+        if ((this.deliveredKinds[g.kind] || 0) < g.count) return false;
+      }
+    }
     this.money -= next.cost;
     this.level++;
     this.emit();

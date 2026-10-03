@@ -197,20 +197,31 @@ async function boot() {
   };
 
   // M1.5-H3: autosliquidación del suelo; agrupa productos seguidos por tipo.
+  // M1.5-J1: sin pago (RATE=0) y el aviso agrupado menciona la señal.
   const liquidateBatch = new Map();
   sim.onLiquidate = (kind, pos, nowMs, meta) => {
-    const value = state.autoLiquidateValue(kind, meta);
-    state.registerLiquidation(kind, nowMs, value, false);
-    const prev = liquidateBatch.get(kind);
-    if (prev && nowMs - prev.at < 3000) {
-      prev.count++;
-      prev.value += value;
-    } else {
-      liquidateBatch.set(kind, { at: nowMs, count: 1, value });
-    }
-    const cur = liquidateBatch.get(kind);
-    hud.toast(`${cur.count > 1 ? `${cur.count} productos liquidados` : '1 producto liquidado'} (+${formatMoney(cur.value)}).`, 2600);
+    liquidateBatch.set(kind, { at: nowMs, count: 1 });
+    void meta;
+    hud.toast('Libres del suelo que se quedó quieto', 2600);
   };
+  let bulkCooldownAt = -Infinity;
+  function onSellGroundPress() {
+    const now = performance.now();
+    if (now < bulkCooldownAt) {
+      const s = Math.max(0, Math.ceil((bulkCooldownAt - now) / 1000));
+      hud.toast(`Esperá ${s}s para volver a liquidar el suelo.`);
+      return;
+    }
+    bulkCooldownAt = now + 30_000;
+    // castigo el combo actual por unidad liquidada a mano (mínimo x1.0)
+    if (state.comboSteps > 0) {
+      const drop = Math.max(1, Math.floor(0.25 / 0.1));
+      state.comboSteps = Math.max(0, state.comboSteps - drop);
+      state.comboUntil = state.comboSteps > 0 ? state.comboUntil : 0;
+      state.emit();
+    }
+    sellAllGround();
+  }
 
   sim.onLost = (kind, pos) => {
     fx.float(pos.x, 1, pos.z, 'Producto extraviado', 'red');
