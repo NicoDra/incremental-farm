@@ -14,22 +14,154 @@ function hash01(i, j) {
   return (((i * 73856093) ^ (j * 19349663)) % 100) / 100;
 }
 
-function buildDepotGate() {
-  const v = voxelBuilder();
-  const gold = '#f2c94c';
-  const dark = '#2b2620';
-  for (const px of [-2.5, 2.5]) {
-    for (let s = 0; s < 4; s++) {
-      v.add(0.34, 0.34, 0.34, px, 0.2 + s * 0.36, -HALF_GRID - 0.5, s % 2 ? dark : gold);
+// ── Glifos voxel 4×7 (col de bits, fila 0=arriba) ──────────────────────────
+const GLYPH = {
+  E: ['1111','1000','1000','1110','1000','1000','1111'],
+  N: ['1001','1101','1101','1011','1011','1001','1001'],
+  T: ['1111','0110','0110','0110','0110','0110','0110'],
+  R: ['1110','1001','1001','1110','1100','1010','1001'],
+  G: ['0111','1000','1000','1011','1001','1001','0111'],
+  A: ['0110','1001','1001','1111','1001','1001','1001'],
+};
+
+// ── Cartel: letras centradas y ajustadas al ancho real del cartel ────────────
+// xLeft/yBot = esquina inferior izquierda del cartel (world space)
+// signW/signH = dimensiones del cartel
+// zFront = z de la cara frontal del cartel (letras sobresalen 0.07)
+function addSignLetters(v, text, xLeft, yBot, signW, signH, zFront) {
+  const nChars = text.length;
+  const cols   = GLYPH[text[0]]?.[0]?.length ?? 4; // columnas por letra
+  const rows   = GLYPH[text[0]]?.length ?? 7;
+  const marginX = signW * 0.07;
+  const marginY = signH * 0.12;
+  const usableW = signW - marginX * 2;
+  const usableH = signH - marginY * 2;
+  // Escala: que las 7 letras quepan horizontalmente con pequeño gap
+  const gapFrac  = 0.18; // fracción del ancho de letra como gap entre letras
+  // totalW = nChars * cw + (nChars-1) * cw*gapFrac = cw * (nChars + (nChars-1)*gapFrac)
+  const cw = usableW / (nChars + (nChars - 1) * gapFrac);
+  const ch = usableH / rows;
+  const sc = Math.min(cw / cols, ch); // pixel size uniforme
+  const letterW = cols * sc;
+  const letterH = rows * sc;
+  const gap     = letterW * gapFrac;
+  // Centrar bloque de letras en el cartel
+  const totalW  = nChars * letterW + (nChars - 1) * gap;
+  const startX  = xLeft + marginX + (usableW - totalW) / 2;
+  const startY  = yBot  + marginY + (usableH - letterH) / 2;
+  const zL      = zFront + 0.04; // ligeramente por delante de la placa
+
+  let lx = startX;
+  for (const ch2 of text) {
+    const m = GLYPH[ch2];
+    if (!m) { lx += letterW + gap; continue; }
+    for (let row = 0; row < m.length; row++) {
+      for (let col = 0; col < m[row].length; col++) {
+        if (m[row][col] === '1') {
+          const px = lx + (col + 0.5) * sc;
+          const py = startY + (m.length - 1 - row + 0.5) * sc;
+          v.add(sc * 0.9, sc * 0.9, 0.07, px, py, zL, '#2a1a0a');
+        }
+      }
     }
+    lx += letterW + gap;
   }
-  v.add(5.4, 0.22, 0.26, 0, 1.72, -HALF_GRID - 0.5, gold);
-  for (let s = -2; s <= 2; s++) {
-    v.add(0.5, 0.1, 0.18, s * 0.95, 1.44, -HALF_GRID - 0.62, dark);
+}
+
+// ── Granero de entrega ────────────────────────────────────────────────────────
+// Devuelve { body, doorL, doorR } — tres meshes separados.
+// doorL/doorR rotan sobre eje Y; su pivote está en la bisagra (borde interior).
+function buildDepotGate() {
+  // Paleta Barro
+  const WOOD_L  = '#a0622a';
+  const WOOD_D  = '#7a4520';
+  const PLANK_H = '#5a3010';
+  const PLANK_R = '#3d2208';
+  const DOOR_C  = '#2e1a08';
+  const TRIM    = '#f2c94c';
+  const SIGN_BG = '#fdf3d0';
+  const METAL   = '#c8a832';
+
+  const fz    = -(HALF_GRID - 0.02);
+  const bz    = fz - 3.2;
+  const midZ  = (fz + bz) / 2;
+  const W     = 3.0;
+  const WH    = 1.2;
+  const DW    = 2.0;   // mitad ancho puerta (total 4 = gap exacto)
+  const DH    = 1.15;
+  const DEPTH = Math.abs(bz - fz);
+  const JT    = 0.14;
+  const leafW = DW - JT;
+
+  // ── cuerpo (todo excepto las hojas de puerta) ─────────────────────────────
+  const vb = voxelBuilder();
+  // paredes
+  vb.add(W * 2, WH, 0.16, 0, WH / 2, bz, WOOD_L);
+  vb.add(0.16, WH, DEPTH, -W, WH / 2, midZ, WOOD_D);
+  vb.add(0.16, WH, DEPTH,  W, WH / 2, midZ, WOOD_D);
+  const sideW = W - DW;
+  vb.add(sideW, WH, 0.16, -(DW + sideW / 2), WH / 2, fz, WOOD_L);
+  vb.add(sideW, WH, 0.16,  (DW + sideW / 2), WH / 2, fz, WOOD_L);
+  vb.add(DW * 2, WH - DH, 0.16, 0, DH + (WH - DH) / 2, fz, WOOD_L);
+  // marco dorado
+  vb.add(JT, DH, 0.2, -(DW - JT / 2), DH / 2, fz + 0.02, TRIM);
+  vb.add(JT, DH, 0.2,  (DW - JT / 2), DH / 2, fz + 0.02, TRIM);
+  vb.add(DW * 2, JT, 0.2, 0, DH - JT / 2, fz + 0.02, TRIM);
+  // tejado
+  const roofY  = WH + 0.08;
+  const ridgeH = 0.55;
+  const tW     = W + 0.22;
+  for (let s = 0; s < 4; s++) {
+    const frac = s / 4;
+    vb.add(tW / 4 + 0.04, 0.18, DEPTH + 0.36,
+      -tW + frac * tW + tW / 8,
+      roofY + frac * ridgeH * 0.5 + ridgeH * 0.05,
+      midZ, PLANK_H);
+    vb.add(tW / 4 + 0.04, 0.18, DEPTH + 0.36,
+       tW - frac * tW - tW / 8,
+      roofY + frac * ridgeH * 0.5 + ridgeH * 0.05,
+      midZ, PLANK_H);
   }
-  const mesh = new THREE.Mesh(v.build(), voxelMaterial());
-  mesh.castShadow = true;
-  return mesh;
+  vb.add(0.18, 0.22, DEPTH + 0.4, 0, roofY + ridgeH, midZ, PLANK_R);
+  vb.add(W * 2, 0.18, 0.14, 0, roofY + ridgeH * 0.5, fz - 0.06, PLANK_H);
+  // cartel
+  const SW = DW * 2 + 0.5, SH = 0.72;
+  const sZ = fz + 0.22;
+  const sY = WH + SH / 2 + 0.04;
+  vb.add(SW + 0.12, SH + 0.12, 0.1, 0, sY, sZ - 0.02, TRIM);
+  vb.add(SW, SH, 0.12, 0, sY, sZ, SIGN_BG);
+  addSignLetters(vb, 'ENTREGA', -SW / 2, sY - SH / 2, SW, SH, sZ);
+
+  const body = new THREE.Mesh(vb.build(), voxelMaterial());
+  body.castShadow = body.receiveShadow = true;
+
+  // ── hojas de puerta separadas ─────────────────────────────────────────────
+  // Cada hoja se construye con pivote en x=0 (bisagra), luego se traslada.
+  // La hoja izquierda tiene bisagra en x = -(DW-JT/2); la derecha en x = +(DW-JT/2).
+  // Al rotar sobre Y: positivo = abre hacia afuera (interior del granero).
+  function buildLeaf(sx) {
+    const vd = voxelBuilder();
+    // Panel centrado en x=0 localmente; la bisagra queda en x = -sx*leafW/2
+    vd.add(leafW, DH - JT, 0.1,  sx * leafW / 2, DH / 2 - JT / 2, 0, DOOR_C);
+    vd.add(leafW, 0.08,    0.12, sx * leafW / 2, DH * 0.52,       0, WOOD_D);
+    for (const by of [0.25, 0.85]) {
+      // bisagra en el borde interior (x = 0 lado bisagra)
+      vd.add(0.1, 0.1, 0.14, sx * 0.1, DH * by, 0, METAL);
+    }
+    const m = new THREE.Mesh(vd.build(), voxelMaterial());
+    m.castShadow = true;
+    // Posiciona el Group con el pivote en la bisagra
+    const group = new THREE.Group();
+    group.add(m);
+    // bisagra en x = ±(DW - JT/2), y=0, z=fz+0.06
+    group.position.set(sx * (DW - JT / 2), 0, fz + 0.06);
+    return group;
+  }
+
+  const doorL = buildLeaf(-1); // bisagra en x = -(DW-JT/2), hoja hacia -x
+  const doorR = buildLeaf( 1); // bisagra en x = +(DW-JT/2), hoja hacia +x
+
+  return { body, doorL, doorR };
 }
 
 export class ParcelRenderer {
@@ -74,14 +206,66 @@ export class ParcelRenderer {
     });
     scene.add(this.wallMesh);
 
-    this.gate = buildDepotGate();
-    scene.add(this.gate);
+    // Granero: cuerpo + dos hojas de puerta separadas
+    const gate = buildDepotGate();
+    this._gateBody = gate.body;
+    this._doorL    = gate.doorL; // Group con pivot en bisagra izquierda
+    this._doorR    = gate.doorR; // Group con pivot en bisagra derecha
+    scene.add(this._gateBody);
+    scene.add(this._doorL);
+    scene.add(this._doorR);
+
+    // Estado de animación de puertas
+    this._doorAnim  = null;
+    this._doorAngle = 0; // ángulo actual (rad), 0=cerrado, MAX_ANGLE=abierto
 
     // M1.5-C: bloqueo visual fuera de la zona jugable (valla de postes + velo).
     this.zoneGroup = new THREE.Group();
     scene.add(this.zoneGroup);
 
     this.applyLevel(0);
+  }
+
+  // Abre las puertas brevemente (llamado desde onDeliver)
+  openDoors() {
+    this._doorAnim = { startMs: performance.now(), durationMs: 600 };
+  }
+
+  // Llamado cada frame desde el loop de render
+  updateDoors() {
+    const MAX_ANGLE = Math.PI / 7; // ~26° — sutil, apenas se entreabre
+    const OPEN_FRAC = 0.3;         // 30% del tiempo abriendo, 70% cerrando suave
+
+    if (!this._doorAnim) {
+      if (this._doorAngle !== 0) {
+        this._doorAngle = 0;
+        this._applyDoorAngle(0);
+      }
+      return;
+    }
+
+    const { startMs, durationMs } = this._doorAnim;
+    const t = Math.min(1, (performance.now() - startMs) / durationMs);
+
+    let angle;
+    if (t < OPEN_FRAC) {
+      const u = t / OPEN_FRAC;
+      angle = MAX_ANGLE * (1 - Math.pow(1 - u, 2)); // ease-out suave
+    } else {
+      const u = (t - OPEN_FRAC) / (1 - OPEN_FRAC);
+      angle = MAX_ANGLE * (1 - u * u);               // ease-in cierre
+    }
+
+    this._doorAngle = angle;
+    this._applyDoorAngle(angle);
+    if (t >= 1) this._doorAnim = null;
+  }
+
+  _applyDoorAngle(angle) {
+    // doorL (bisagra izquierda, x negativo): abre girando hacia -Z (interior)
+    this._doorL.rotation.y =  angle;
+    // doorR (bisagra derecha, x positivo): abre girando hacia +Z (interior)
+    this._doorR.rotation.y = -angle;
   }
 
   // Dibuja anillo de postes/valla en el borde del rect + velo translúcido fuera.

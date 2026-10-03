@@ -5,6 +5,9 @@ export const HALF_GRID = GRID_SIZE / 2;
 export const DELIVERY_Z = -HALF_GRID - 0.55; // plano de entrega (borde norte)
 export const GAP_CELLS = [6, 7, 8, 9]; // celdas de la brecha norte
 
+// Máximo de vehículos de entrega animados simultáneos (puramente visual, sin efecto en física)
+export const MAX_DELIVERY_VEHICLES = 3;
+
 export const LEVEL_H = 1.0; // altura de cada nivel de construcción (0, 1, 2)
 export const MAX_LEVEL = 2;
 

@@ -267,10 +267,10 @@ function buildProducerGeo(type, age = 0) {
     // Boca frontal sobresale (casco llega a −0.43; la boca queda afuera).
     v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
     v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
-    // Entradas por costado: hueco dark + tinte del ingrediente en la mitad.
-    // Sin íconos pegados al cuerpo: esos van en el grupo y flotan con las flechas.
-    v.add(0.5, 0.3, 0.1, -0.42, 0.42, 0.42, TEAL); // trasera izquierda (oeste→maíz)
-    v.add(0.5, 0.3, 0.1, 0.42, 0.42, 0.42, '#e08a3c'); // trasera derecha (este→calabaza)
+    // Entradas por COSTADO (M1.5-F5): a la altura del eje (z≈0), no atrás.
+    // las compuertas son laterales (izda maíz / dcha calabaza), con tinte.
+    v.add(0.1, 0.3, 0.5, -0.42, 0.42, 0, TEAL);      // izquierda (oeste→maíz)
+    v.add(0.1, 0.3, 0.5, 0.42, 0.42, 0, '#e08a3c');   // derecha (este→calabaza)
   } else if (type === 'corral') {
     const fence = '#8a5f36';
     for (const px of [-0.42, 0.42]) {
@@ -316,10 +316,10 @@ function buildProducerGeo(type, age = 0) {
     // -0.36/-0.38 quedaría enterrada dentro del casco (era el bug visual).
     v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
     v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
-    // Entradas por costado (M1.5-F5): hueco lateral W (cerdo) y E (sal), sin
-    // íconos incrustados: esos van en el grupo y flotan arriba como las flechas.
-    v.add(0.12, 0.3, 0.45, -0.48, 0.44, 0, '#f4a8bd'); // oeste: cerdo (rosa)
-    v.add(0.12, 0.3, 0.45, 0.48, 0.44, 0, '#ececf0'); // este: sal (blanca)
+    // Entradas por costado (M1.5-F5): la compuerta queda en el lateral y con
+    // tinte; no atrás (es lo que alimentaba a la confusión con el modelo).
+    v.add(0.12, 0.3, 0.45, -0.48, 0.44, 0.02, '#f4a8bd'); // izquierda: cerdo (rosa)
+    v.add(0.12, 0.3, 0.45, 0.48, 0.44, 0.02, '#ececf0'); // derecha: sal (blanca)
   } else if (type === 'silo') {
     // M1.5-F4: tanque vertical con entrada trasera (oscura) y boca frontal
     // (dorada): aberturas físicas distintas para cada lado.

@@ -171,7 +171,8 @@ async function boot() {
 
   // M1.5-B/C: el 4º param meta (jumbo×2, multiplicadores) es obligatorio.
   sim.onDeliver = (kind, pos, nowMs, meta) => {
-    const res =     state.registerDelivery(kind, nowMs, meta);
+    const res = state.registerDelivery(kind, nowMs, meta);
+    parcel.openDoors();
     fx.burst(pos.x, 1, pos.z, 0xf2c94c);
     fx.float(
       pos.x,
@@ -1640,6 +1641,7 @@ async function boot() {
     view.controls.update();
     productR.sync(sim.products);
     toolsR.update(t, sim.tools, t);
+    parcel.updateDoors();
     fx.update(dt, t);
     hud.update(t);
     view.renderer.render(view.scene, view.camera);
