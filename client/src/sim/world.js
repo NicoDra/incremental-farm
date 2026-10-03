@@ -30,11 +30,14 @@ import {
   SEMBRADOR_MANUAL_COOLDOWN_MS,
   snapRot8,
   computeLevelOpenings,
+  localSideToWorldDir,
+  worldDirToDelta,
   PRODUCT_PHYS,
   FAN_POWER_DEFAULT,
   normalizeFanTune,
   fanMovesProduct,
 } from 'chanchos-shared';
+import { rand as seededRand } from './seed.js';
 
 const WALL_H = 1.2;
 const RAMP_HALF_LEN = 0.707; // la rampa baja exactamente 1 nivel en 1 celda (45°)
@@ -92,14 +95,29 @@ export class SimWorld {
     this.onDeliver = null; // (kind, pos, nowMs, meta {jumbo, fatMult})
     this.onLost = null; // (kind, pos)
     this.onRecycle = null; // (kind, pos, nowMs, meta)
+    this.onLiquidate = null; // (kind, pos, nowMs, meta) — venta suelta y auto-liquidación
     this.mods = defaultModifiers();
     this.defaultFanTier = 0;
+    // M1.5-H: aleatoriedad externa inyectable (por defecto pseudoaleatorio con semilla).
+    this.rng = seededRand;
+    // M1.5-H3: auto-liquidación del suelo (90 s por defecto, desactivada si es null).
+    this.autoLiquidateMs = null;
     this.buildStatic();
+  }
+
+  // M1.5-H3: flag público de on/off para el simulador/depuración.
+  setAutoLiquidateMs(ms) {
+    this.autoLiquidateMs = Number.isFinite(ms) ? Math.max(0, ms) : null;
   }
 
   // M1.5-B: la UI (vía state.simModifiers()) inyecta mejoras sin acoplar física a economía.
   setModifiers(m) {
     Object.assign(this.mods, m || {});
+  }
+
+  // M1.5-H: en el simulador la aleatoriedad es determinista por semilla.
+  setRandomSource(fn) {
+    this.rng = typeof fn === 'function' ? fn : seededRand;
   }
 
   setFanTier(tier) {
@@ -462,10 +480,15 @@ export class SimWorld {
         if (def.kind === 'converter') {
           const ins = Array.isArray(def.inputs) ? def.inputs.slice() : [def.input].filter(Boolean);
           entry.recipeInputs = ins;
-          // M1.5-F2: entrada única trasera para toda receta (los dos
-          // ingredientes entran por atrás; buffers separados por tipo).
+          // M1.5-F5: entrada por costado de cada ingrediente (silo y receta
+          // simple siguen por atrás). Oráculo único: /shared (igual que canaletas).
           entry.inputDirs = Object.fromEntries(
-            ins.map((k) => [k, { x: -entry.dir.x, z: -entry.dir.z }]),
+            ins.map((k) => {
+              const side = def.inputSides?.[k] || 'back';
+              const wd = localSideToWorldDir(entry.rot8, side);
+              const { di, dj } = worldDirToDelta(wd);
+              return [k, { x: di, z: dj }];
+            }),
           );
           if (ins.length > 1) {
             entry.inputBuffers = Object.fromEntries(ins.map((k) => [k, []]));
@@ -525,14 +548,14 @@ export class SimWorld {
   emitFrom(e) {
     const def = TOOLS[e.type];
     const m = this.mouthPos(e);
-    const jumbo = e.type === 'sembrador' && Math.random() < (this.mods.sembradorJumboChance || 0);
-    const burst = e.type === 'sembrador' && Math.random() < (this.mods.sembradorBurstChance || 0);
+    const jumbo = e.type === 'sembrador' && this.rng() < (this.mods.sembradorJumboChance || 0);
+    const burst = e.type === 'sembrador' && this.rng() < (this.mods.sembradorBurstChance || 0);
     const n = burst ? 3 : 1;
     const clear = 0.18;
     const perp = { x: -e.dir.z, z: e.dir.x };
     let first = null;
     for (let k = 0; k < n; k++) {
-      const lateral = (Math.random() - 0.5) * 0.12;
+      const lateral = (this.rng() - 0.5) * 0.12;
       const p = this.spawnProduct(
         def.product,
         m.x + e.dir.x * clear + perp.x * lateral,
@@ -733,7 +756,7 @@ export class SimWorld {
           timeMs: cm.time || def.time,
           jumbo: p.jumbo,
           fatMult: cm.fat || 1,
-          count: Math.random() < (cm.double || 0) ? 2 : 1,
+          count: this.rng() < (cm.double || 0) ? 2 : 1,
         };
         if (multiInput) {
           const ib = e.inputBuffers?.[p.kind];
@@ -778,7 +801,7 @@ export class SimWorld {
           timeMs: cm.time || def.time,
           jumbo: used.some((u) => u?.jumbo),
           fatMult: cm.fat || 1,
-          count: Math.random() < (cm.double || 0) ? 2 : 1,
+          count: this.rng() < (cm.double || 0) ? 2 : 1,
         };
         if (canStart) {
           e.pending = true;
@@ -984,6 +1007,15 @@ export class SimWorld {
       const onBareGround = !groundEntry || TOOLS[groundEntry.type]?.kind !== 'channel';
       if (nearGround && onBareGround && speed < 0.12) {
         if (!p.groundIdleSince) p.groundIdleSince = nowMs;
+        else if (this.autoLiquidateMs && nowMs - p.groundIdleSince > this.autoLiquidateMs) {
+          // M1.5-H3: quieto en el suelo desnudo más de AUTO_LIQUIDATE_SECONDS:
+          // se liquida automáticamente y libera el cuerpo. En canaleta no aplica.
+          this.removeProduct(idx);
+          if (this.onLiquidate) {
+            this.onLiquidate(p.kind, t, nowMs, { jumbo: p.jumbo, fatMult: p.fatMult });
+          }
+          continue;
+        }
       } else p.groundIdleSince = 0;
       if (speed > SPEED_LIMIT) {
         const k = SPEED_LIMIT / speed;

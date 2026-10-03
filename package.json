@@ -7,6 +7,7 @@
     "dev": "pnpm --filter chanchos-client dev",
     "build": "pnpm --filter chanchos-client build",
     "preview": "pnpm --filter chanchos-client preview",
-    "test:all": "pnpm --filter chanchos-client test:all"
+    "test:all": "pnpm --filter chanchos-client test:all",
+    "sim:balance": "pnpm --filter chanchos-client sim:balance"
   }
 }

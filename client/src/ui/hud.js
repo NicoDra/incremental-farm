@@ -438,10 +438,14 @@ export class Hud {
       el.appendChild(recipeLine);
 
       if (info.recipeInputs.length > 1) {
-        const sidesLine = document.createElement('div');
-        sidesLine.className = 'sel-sub';
-        sidesLine.textContent = 'Entrada compartida por la trasera.';
-        el.appendChild(sidesLine);
+        for (const row of info.recipeInputs) {
+          const sideLine = document.createElement('div');
+          sideLine.className = 'sel-sub';
+          const wrong = info.waitingWrong && row.count === 0;
+          sideLine.textContent =
+            `${row.name} ← ${row.sideLabel} ${row.count}/${row.cap}${row.full ? ' · llena' : ''}${wrong ? ' · esperando' : ''}`;
+          el.appendChild(sideLine);
+        }
       }
 
       const stateLine = document.createElement('div');
@@ -454,11 +458,13 @@ export class Hud {
       outLine.textContent = `Salida: ${info.outputBuffer?.count ?? 0}/${info.outputBuffer?.cap ?? 0}`;
       el.appendChild(outLine);
 
-      for (const row of info.recipeInputs) {
-        const inputLine = document.createElement('div');
-        inputLine.className = 'sel-sub';
-        inputLine.textContent = `${row.name}: ${row.count}/${row.cap}${row.full ? ' · llena' : ''}`;
-        el.appendChild(inputLine);
+      if (info.recipeInputs.length === 1) {
+        for (const row of info.recipeInputs) {
+          const inputLine = document.createElement('div');
+          inputLine.className = 'sel-sub';
+          inputLine.textContent = `${row.name}: ${row.count}/${row.cap}${row.full ? ' · llena' : ''}`;
+          el.appendChild(inputLine);
+        }
       }
 
       if (info.recipeHint) {
@@ -644,13 +650,15 @@ export class Hud {
     this._pulseT = setTimeout(() => this.el.money.classList.remove('pulse'), 140);
   }
 
-  toast(text) {
+  toast(text, stayMs = null) {
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = text;
     this.el.toasts.appendChild(el);
     while (this.el.toasts.children.length > 4) this.el.toasts.firstChild.remove();
-    setTimeout(() => el.classList.add('out'), 3200);
-    setTimeout(() => el.remove(), 3700);
+    const out = stayMs == null ? 3200 : stayMs;
+    const rem = out + 500;
+    setTimeout(() => el.classList.add('out'), out);
+    setTimeout(() => el.remove(), rem);
   }
 }

@@ -171,7 +171,7 @@ async function boot() {
 
   // M1.5-B/C: el 4º param meta (jumbo×2, multiplicadores) es obligatorio.
   sim.onDeliver = (kind, pos, nowMs, meta) => {
-    const res = state.registerDelivery(kind, nowMs, meta);
+    const res =     state.registerDelivery(kind, nowMs, meta);
     fx.burst(pos.x, 1, pos.z, 0xf2c94c);
     fx.float(
       pos.x,
@@ -191,9 +191,25 @@ async function boot() {
 
   sim.onRecycle = (kind, pos) => {
     const value = state.recycleValue(kind);
-    state.addMoney(value);
+    state.registerLiquidation(kind, now(), value, true);
     fx.float(pos.x, pos.y + 0.5, pos.z, `+${formatMoney(value)} reciclado`, 'gray', value);
-    hud.toast('El Chango Nocturno recogió stock dormido. Cobró comisión.');
+      hud.toast('El Chango Nocturno recogió stock dormido. Cobró comisión.');
+  };
+
+  // M1.5-H3: autosliquidación del suelo; agrupa productos seguidos por tipo.
+  const liquidateBatch = new Map();
+  sim.onLiquidate = (kind, pos, nowMs, meta) => {
+    const value = state.autoLiquidateValue(kind, meta);
+    state.registerLiquidation(kind, nowMs, value, false);
+    const prev = liquidateBatch.get(kind);
+    if (prev && nowMs - prev.at < 3000) {
+      prev.count++;
+      prev.value += value;
+    } else {
+      liquidateBatch.set(kind, { at: nowMs, count: 1, value });
+    }
+    const cur = liquidateBatch.get(kind);
+    hud.toast(`${cur.count > 1 ? `${cur.count} productos liquidados` : '1 producto liquidado'} (+${formatMoney(cur.value)}).`, 2600);
   };
 
   sim.onLost = (kind, pos) => {
@@ -275,6 +291,28 @@ async function boot() {
     return '';
   }
 
+  // M1.5-F5: en recetas dobles el costado de cada entrada debe estar abierto;
+  // si lo tapa otra pieza (cuerpo sólido), avisa y desmarca la colocación.
+  function sideOccupiedComplaint(type, cell, h, r8) {
+    if (!cell) return '';
+    const def = TOOLS[type];
+    if (!def?.inputSides) return '';
+    const q = (((Math.round((r8 || 0) / 2) % 4) + 4) % 4);
+    const DIRS = ['N', 'E', 'S', 'W'];
+    const delta = (d) => (d === 'N' ? { di: 0, dj: -1 } : d === 'E' ? { di: 1, dj: 0 } : d === 'S' ? { di: 0, dj: 1 } : { di: -1, dj: 0 });
+    for (const [kind, side] of Object.entries(def.inputSides)) {
+      const si = side === 'front' ? 0 : side === 'right' ? 1 : side === 'back' ? 2 : 3;
+      const w = DIRS[(si + q) % 4];
+      const d = delta(w);
+      const t = sim.tools.get(sim.key(cell.i + d.di, cell.j + d.dj, h));
+      if (t && TOOLS[t.type]?.kind !== 'channel') {
+        const sideName = w === 'E' ? 'este' : w === 'O' ? 'oeste' : w === 'N' ? 'norte' : 'sur';
+        return `Entrada tapada al ${sideName} (${PRODUCTS[kind]?.name || kind}): dejá ese costado libre.`;
+      }
+    }
+    return '';
+  }
+
   // Devuelve '' si colocó o la razón del fallo. opts.quiet: sin toast (barrido).
   function tryPlace(type, cell, opts = {}) {
     const fail = (msg) => {
@@ -298,6 +336,8 @@ async function boot() {
       const mc = siloMouthComplaint(cell, height, rot8);
       if (mc) return fail(mc);
     }
+    const sc = sideOccupiedComplaint(type, cell, height, rot8);
+    if (sc) return fail(sc);
     const paid = state.toolPrice(type);
     if (!state.buyTool(type)) {
       return fail('Fondos insuficientes. Finanzas sugiere vender más choclos.');
@@ -354,12 +394,16 @@ async function boot() {
       ? entry.recipeInputs.slice()
       : (def.input ? [def.input] : []);
     const isConverter = def.kind === 'converter';
-    // M1.5-F2: una entrada trasera compartida; el panel cuenta por ingrediente.
+    // M1.5-F5: recetas dobles por costado: cada entrada con su lado visible.
+    const sideName = (side) => (side === 'left' ? 'izquierda' : side === 'right' ? 'derecha' : side === 'front' ? 'frente' : 'trasera');
     const inputRows = recipeInputs.map((kind) => {
       const arr = Array.isArray(entry.inputBuffers?.[kind]) ? entry.inputBuffers[kind] : [];
+      const side = def.inputSides?.[kind] || 'back';
       return {
         kind,
         name: PRODUCTS[kind]?.name || kind,
+        side,
+        sideLabel: sideName(side),
         count: arr.length,
         cap: CONVERTER_BUFFER_CAP,
         full: arr.length >= CONVERTER_BUFFER_CAP,
@@ -385,8 +429,8 @@ async function boot() {
         const first = missing[0];
         recipeState = 'Esperando ingredientes';
         recipeHint = waitingWrong
-          ? `Ingrediente equivocado. Esperando ${first.name}.`
-          : `Esperando ${first.name}.`;
+          ? `Ingrediente equivocado. Esperando ${first.name} por la ${first.sideLabel}.`
+          : `Esperando ${first.name} por la ${first.sideLabel}.`;
       }
       else if (outputQ >= outputCap) recipeState = 'Buffer de salida lleno';
       else if (outputQ > 0) recipeState = 'Lista para producir';
@@ -472,6 +516,7 @@ async function boot() {
       outputBuffer: { count: outputQ, cap: outputCap },
       recipeState,
       recipeHint,
+      waitingWrong,
       siloInfo,
       fanInfo,
     };
@@ -1251,6 +1296,8 @@ async function boot() {
     let ok = canPlace(type, hoverCell.i, hoverCell.j, h);
     // M1.5-F4: fantasma rojo si la boca del silo nacería dentro de otra máquina.
     if (ok && type === 'silo' && !mode.moving && siloMouthComplaint(hoverCell, h, r8)) ok = false;
+    // M1.5-F5: fantasma rojo si la entrada por costado de una receta doble está tapada.
+    if (ok && (TOOLS[type]?.inputSides) && sideOccupiedComplaint(type, hoverCell, h, r8)) ok = false;
     const affordable = mode.moving ? true : state.money >= state.toolPrice(type);
     const axis = type === 'fan' ? fanAxis3(r8, pd) : null;
     // M1.5-G: el fantasma del ventilador muestra los ajustes copiados (I).
@@ -1324,10 +1371,10 @@ async function boot() {
     if (idx < 0) return false;
     const p = sim.products[idx];
     const t = p.body.translation();
-    const value = state.recycleValue(p.kind, { jumbo: p.jumbo, fatMult: p.fatMult });
+    const value = state.liquidateValue(p.kind, { jumbo: p.jumbo, fatMult: p.fatMult });
     sim.removeProduct(idx);
-    state.addMoney(value);
-    fx.float(t.x, Math.max(t.y, 0.5) + 0.5, t.z, `+${formatMoney(value)} venta suelta`, 'gray', value);
+    state.registerLiquidation(p.kind, now(), value, true);
+    fx.float(t.x, Math.max(t.y, 0.5) + 0.5, t.z, `+${formatMoney(value)} liquidado`, 'gray', value);
     hud.pulseMoney();
     return true;
   }
@@ -1338,19 +1385,19 @@ async function boot() {
     for (let idx = sim.products.length - 1; idx >= 0; idx--) {
       const p = sim.products[idx];
       const t = p.body.translation();
-      const value = state.recycleValue(p.kind, { jumbo: p.jumbo, fatMult: p.fatMult });
+      const value = state.liquidateValue(p.kind, { jumbo: p.jumbo, fatMult: p.fatMult });
       sim.removeProduct(idx);
       sold++;
       total += value;
-      fx.float(t.x, Math.max(t.y, 0.5) + 0.4, t.z, `+${formatMoney(value)} venta suelta`, 'gray', value);
+      fx.float(t.x, Math.max(t.y, 0.5) + 0.4, t.z, `+${formatMoney(value)} liquidado`, 'gray', value);
     }
     if (!sold) {
-      hud.toast('No hay producto suelto para vender.');
+      hud.toast('No hay producto suelto para liquidar.');
       return;
     }
-    state.addMoney(total);
+    state.registerLiquidation('varios', now(), total, true);
     hud.pulseMoney();
-    hud.toast(`Vendidos ${sold} sueltos por ${formatMoney(total)}.`);
+    hud.toast(`Liquidados ${sold} sueltos por ${formatMoney(total)}.`);
   }
 
   canvas.addEventListener('pointerup', (e) => {

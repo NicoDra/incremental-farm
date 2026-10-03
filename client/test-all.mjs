@@ -25,6 +25,7 @@ const SMOKES = [
   'smoke-d5-fan-salt.mjs',
   'smoke-d5-g-fan.mjs',
   'smoke-d5-f4-silo.mjs',
+  'smoke-d5-f5-sides.mjs',
   'smoke-d5-jumbo-accept.mjs',
   'debug-embudo.mjs',
 ];

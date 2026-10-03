@@ -101,14 +101,15 @@ export const TOOLS = {
     interval: 5200,
     hint: 'Emite sal industrial por la boca frontal.',
   },
-    pienso: {
-      name: 'Planta de Mezcla',
-      base: 120,
+  pienso: {
+    name: 'Planta de Mezcla',
+    base: 120,
     kind: 'converter',
     inputs: ['corn', 'pumpkin'],
+    inputSides: { corn: 'left', pumpkin: 'right' },
     output: 'feed',
     time: 3200,
-    hint: 'Mezcla choclo+calabaza: 1+1 → pienso. Ambos entran por atrás (choclo y calabaza, cualquier lado de la boca).',
+    hint: 'Mezcla choclo+calabaza: 1+1. Entrada izquierda = choclo, derecha = calabaza.',
   },
   corral: {
     name: 'Corral Ejecutivo',
@@ -137,14 +138,15 @@ export const TOOLS = {
     time: 4000,
     hint: 'Traga cerditos por atrás, escupe jamón.',
   },
-    jamonera_industrial: {
-      name: 'Curadora de Jambros',
-      base: 260,
+  jamonera_industrial: {
+    name: 'Curadora de Jambros',
+    base: 260,
     kind: 'converter',
     inputs: ['pig', 'salt'],
+    inputSides: { pig: 'left', salt: 'right' },
     output: 'ham',
     time: 4600,
-    hint: 'Receta premium: cerdo+sal para curado industrial. Ambos entran por atrás (cerdo y sal, cualquier lado de la boca).',
+    hint: 'Receta premium: cerdo por la izquierda, sal por la derecha.',
   },
   silo: {
     name: 'Silo Amortiguador',
@@ -294,10 +296,15 @@ export function isChannelType(type) {
   return TOOLS[type]?.kind === 'channel';
 }
 
-// M1.5-F2 simplificado: una receta doble = una boca trasera compartida
-// (los dos ingredientes entran por atrás; buffers separados por tipo dentro).
+// M1.5-F5: receta doble = una entrada por ingrediente en el costado que le
+// toca (maíz izquierdo/calabaza derecha, cerdo izquierdo/sal derecho);
+// receta simple o silo: la trasera, igual que antes.
 function converterInputWorldDirs(toolDef, rot8) {
   if (!toolDef || (toolDef.kind !== 'converter' && toolDef.kind !== 'silo')) return [];
+  if (toolDef.inputSides && typeof toolDef.inputSides === 'object') {
+    const sides = [...new Set(Object.values(toolDef.inputSides))].filter(Boolean);
+    return sides.map((s) => localSideToWorldDir(rot8, s));
+  }
   return [localSideToWorldDir(rot8, 'back')];
 }
 
@@ -504,6 +511,15 @@ export const PRODUCT_ANGULAR_DAMPING = 2.2;
 
 // Tiempo máximo quieto en suelo antes de limpiar cuerpo para no saturar cap.
 export const GROUND_IDLE_DESPAWN_MS = 20000;
+// M1.5-H3: regla de liquidación. Liquidar = venta por clic / vender el suelo.
+// Auto-liquidación = cuerpos quietos en el suelo (sin canaleta encima) a los
+// AUTO_LIQUIDATE_SECONDS. Paga menos: menos % del valor base en ambas.
+export const LIQUIDATION_RATE = 0.25; // venta manual por clic o "vender todo el suelo"
+export const AUTO_LIQUIDATE_SECONDS = 90;
+export const AUTO_LIQUIDATE_RATE = 0.10; // pago automático por tiempo quieto
+export const AUTO_LIQUIDATE_MS = AUTO_LIQUIDATE_SECONDS * 1000;
+
+// Nombre interno: CHANGO recogida stock = el comunicador ya existente.
 
 export function fanTierInfo(tier) {
   const t = Math.max(0, Math.min(Number.isFinite(tier) ? tier : 0, FAN_TIERS.length - 1));

@@ -257,13 +257,16 @@ function buildProducerGeo(type, age = 0) {
     v.add(0.22, 0.18, 0.22, -0.2, 0.6, 0.15, '#ffffff');
     v.add(0.4, 0.26, 0.1, 0, 0.16, -0.42, '#4a3820');
   } else if (type === 'pienso') {
-    // Dos tolvas (maíz + calabaza) que vierten a una boca trasera compartida.
+    // M1.5-F5: maíz entra por la izquierda (oeste), calabaza por la derecha
+    // (este); cada entrada tiene su colador tricolor sobre la cara abierta.
     v.add(0.86, 0.78, 0.86, 0, 0.39, 0, '#6e5a46');
     v.add(0.7, 0.14, 0.7, 0, 0.84, 0, GOLD);
     v.add(0.22, 0.4, 0.22, -0.22, 0.95, 0.12, '#9a9aa2');
-    v.add(0.22, 0.4, 0.22, 0.22, 0.95, 0.12, '#9a9aa2'); // segunda tolva
+    v.add(0.22, 0.4, 0.22, 0.22, 0.95, 0.12, '#9a9aa2');
     mouthBox(v, 0.42);
-    v.add(0.72, 0.34, 0.12, 0, 0.42, 0.4, DARK); // boca trasera ancha
+    // Entradas por costado: hueco oscuro c/rio central y colosine arriba.
+    v.add(0.5, 0.3, 0.1, -0.42, 0.42, 0.42, TEAL); // trasera izquierda (oeste→maíz)
+    v.add(0.5, 0.3, 0.1, 0.42, 0.42, 0.42, '#e08a3c'); // trasera derecha (este→calabaza)
   } else if (type === 'corral') {
     const fence = '#8a5f36';
     for (const px of [-0.42, 0.42]) {
@@ -309,9 +312,10 @@ function buildProducerGeo(type, age = 0) {
     // -0.36/-0.38 quedaría enterrada dentro del casco (era el bug visual).
     v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
     v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
-    // Entrada única trasera, ensanchada para cerdo+sal (capa externa).
-    v.add(0.72, 0.3, 0.12, 0, 0.44, 0.52, DARK);
-    v.add(0.6, 0.2, 0.1, 0, 0.44, 0.56, TEAL);
+    // Entradas por costado en la trasera: trasera W (cerdo) con tinte rosa y
+    // trasera E (sal) con tinte bizco/co; recuerdo del lado de cada ingrediente.
+    v.add(0.45, 0.3, 0.12, -0.5, 0.44, 0.52, '#f4a8bd');
+    v.add(0.45, 0.3, 0.12, 0.5, 0.44, 0.52, '#ececf0');
   } else if (type === 'silo') {
     // M1.5-F4: tanque vertical con entrada trasera (oscura) y boca frontal
     // (dorada): aberturas físicas distintas para cada lado.
@@ -500,12 +504,18 @@ export class ToolManager {
       group.add(out);
       arrows.push(out);
       if (def.kind === 'converter' || def.kind === 'silo') {
-        // M1.5-F2: una sola boca trasera compartida → una flecha teal.
-        const inp = mouthArrow(TEAL, 0.85);
-        inp.position.set(0, 0.45, 0.78);
-        inp.rotation.y = Math.PI;
-        group.add(inp);
-        arrows.push(inp);
+        // M1.5-F5: con recetas por costado hay una flecha teal por entrada;
+        // de lo contrario y para silo queda una sola trasera.
+        const sides = def.inputSides ? Object.values(def.inputSides) : ['back'];
+        for (const side of sides) {
+          const inp = mouthArrow(TEAL, 0.85);
+          if (side === 'left') { inp.position.set(-0.78, 0.45, 0); inp.rotation.y = -Math.PI / 2; }
+          else if (side === 'right') { inp.position.set(0.78, 0.45, 0); inp.rotation.y = Math.PI / 2; }
+          else if (side === 'front') { inp.position.set(0, 0.45, -0.78); inp.rotation.y = 0; }
+          else { inp.position.set(0, 0.45, 0.78); inp.rotation.y = Math.PI; }
+          group.add(inp);
+          arrows.push(inp);
+        }
       }
     } else if (type === 'union') {
       // salida al frente (dorada) + dos entradas laterales (teal)
@@ -702,10 +712,15 @@ export class ToolManager {
       out.position.set(0, 0.45, -0.78);
       g.add(out);
       if (def.kind === 'converter' || def.kind === 'silo') {
-        const inp = new THREE.Mesh(chevronGeo(0.85), this.ghostArrowMats.in);
-        inp.position.set(0, 0.45, 0.78);
-        inp.rotation.y = Math.PI;
-        g.add(inp);
+        const sides = def.inputSides ? Object.values(def.inputSides) : ['back'];
+        for (const side of sides) {
+          const inp = new THREE.Mesh(chevronGeo(0.85), this.ghostArrowMats.in);
+          if (side === 'left') { inp.position.set(-0.78, 0.45, 0); inp.rotation.y = -Math.PI / 2; }
+          else if (side === 'right') { inp.position.set(0.78, 0.45, 0); inp.rotation.y = Math.PI / 2; }
+          else if (side === 'front') { inp.position.set(0, 0.45, -0.78); inp.rotation.y = 0; }
+          else { inp.position.set(0, 0.45, 0.78); inp.rotation.y = Math.PI; }
+          g.add(inp);
+        }
       }
     } else if (type === 'union') {
       const out = new THREE.Mesh(chevronGeo(0.85), this.ghostArrowMats.out);

@@ -1,0 +1,105 @@
+{
+  "generatedAt": "2026-10-03T02:57:40.990Z",
+  "seed": 42,
+  "durationMin": 60,
+  "deterministic": true,
+  "runs": [
+    {
+      "name": "Perezosa",
+      "finalLevel": "Granero de Madera S.A.",
+      "finalMoney": 1247,
+      "deliveredPortal": 108,
+      "portalIncome": 560,
+      "manualLiquidation": 0,
+      "autoLiquidation": 1095,
+      "manualLiquidationUnits": 0,
+      "autoLiquidationUnits": 1095,
+      "bodiesAtEnd": 120,
+      "stuckTicks": 116,
+      "capHitAtPct": 0.03333796296296631,
+      "upgradesPurchased": 4,
+      "milestones": [
+        {
+          "atMin": 12.6,
+          "money": 1,
+          "msg": "sube a Granero de Madera S.A."
+        }
+      ]
+    },
+    {
+      "name": "Completa",
+      "finalLevel": "Granja de Piedra S.A.",
+      "finalMoney": 283,
+      "deliveredPortal": 247,
+      "portalIncome": 1598,
+      "manualLiquidation": 0,
+      "autoLiquidation": 893,
+      "manualLiquidationUnits": 0,
+      "autoLiquidationUnits": 893,
+      "bodiesAtEnd": 120,
+      "stuckTicks": 116,
+      "capHitAtPct": 0.03333796296296631,
+      "upgradesPurchased": 6,
+      "milestones": [
+        {
+          "atMin": 10.8,
+          "money": 0,
+          "msg": "sube a Granero de Madera S.A."
+        },
+        {
+          "atMin": 48.3,
+          "money": 0,
+          "msg": "sube a Granja de Piedra S.A."
+        }
+      ]
+    },
+    {
+      "name": "ConLimpieza",
+      "finalLevel": "Granja de Piedra S.A.",
+      "finalMoney": 4060,
+      "deliveredPortal": 62,
+      "portalIncome": 476,
+      "manualLiquidation": 5722,
+      "autoLiquidation": 0,
+      "manualLiquidationUnits": 5722,
+      "autoLiquidationUnits": 0,
+      "bodiesAtEnd": 96,
+      "stuckTicks": 0,
+      "capHitAtPct": null,
+      "upgradesPurchased": 6,
+      "milestones": [
+        {
+          "atMin": 4,
+          "money": 92,
+          "msg": "sube a Granero de Madera S.A."
+        },
+        {
+          "atMin": 20,
+          "money": 42,
+          "msg": "sube a Granja de Piedra S.A."
+        }
+      ]
+    },
+    {
+      "name": "Basura",
+      "finalLevel": "Corral de Barro S.A.",
+      "finalMoney": 1162,
+      "deliveredPortal": 5,
+      "portalIncome": 15,
+      "manualLiquidation": 0,
+      "autoLiquidation": 1127,
+      "manualLiquidationUnits": 0,
+      "autoLiquidationUnits": 1127,
+      "bodiesAtEnd": 98,
+      "stuckTicks": 116,
+      "capHitAtPct": 0.03333796296296631,
+      "upgradesPurchased": 0,
+      "milestones": []
+    }
+  ],
+  "cornPath": {
+    "startZ": -3.506653308868408,
+    "stopsAtZ": -4.298668384552002,
+    "deliveryZ": -8.55
+  }
+}

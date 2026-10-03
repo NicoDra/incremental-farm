@@ -23,6 +23,8 @@ import {
   SILO_CAP,
   SILO_CAP_PER_LEVEL,
   SILO_INTERVAL_MS,
+  LIQUIDATION_RATE,
+  AUTO_LIQUIDATE_RATE,
 } from 'chanchos-shared';
 
 // M1.5-C: zona jugable por edad (rect inclusivo en celdas 0..15).
@@ -205,6 +207,33 @@ export class GameState {
 
   recycleValue(kind, meta = {}) {
     return Math.max(1, Math.floor(PRODUCTS[kind].value * this.incomeMult() * 0.5 * this.productValueMult(kind, meta)));
+  }
+
+  // M1.5-H3: regla de liquidación (venta por clic y "vender el suelo").
+  // 25 % del valor base, sin multiplicadores globales ni combo ni metas.
+  liquidateValue(kind, meta = {}) {
+    return Math.max(1, Math.floor(PRODUCTS[kind].value * LIQUIDATION_RATE * (meta.jumbo ? JUMBO_VALUE_MULT : 1)));
+  }
+
+  // Pague automático por dejar productos quietos en el suelo: 10 % del valor base.
+  autoLiquidateValue(kind, meta = {}) {
+    return Math.max(1, Math.floor(PRODUCTS[kind].value * AUTO_LIQUIDATE_RATE * (meta.jumbo ? JUMBO_VALUE_MULT : 1)));
+  }
+
+  // Suma el ingreso sin tocar combo/metas/entregas. Total acumulado aparte.
+  // kindManual=true para clic del jugador ("vender") y falso para auto-liquidación.
+  registerLiquidation(kind, now, value, manual = true) {
+    this.money += value;
+    this.liquidatedCount = (this.liquidatedCount || 0) + 1;
+    this.liquidatedValue = (this.liquidatedValue || 0) + value;
+    if (manual) {
+      this.liquidatedManualCount = (this.liquidatedManualCount || 0) + 1;
+      this.liquidatedManualValue = (this.liquidatedManualValue || 0) + value;
+    } else {
+      this.liquidatedAutoCount = (this.liquidatedAutoCount || 0) + 1;
+      this.liquidatedAutoValue = (this.liquidatedAutoValue || 0) + value;
+    }
+    this.emit();
   }
 
   addMoney(v) {

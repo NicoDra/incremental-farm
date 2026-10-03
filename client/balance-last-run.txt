@@ -1,0 +1,293 @@
+﻿node.exe : $ node sim/runBalance.mjs
+En C:\Program Files\nodejs\pnpm.ps1: 16 Carácter: 5
++     & "$basedir/node$exe"  "$basedir/node_modules/pnpm/bin/pnpm.mjs"  ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ node sim/runBalance.mjs:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+=== Perezosa ===
+  min edad            dinero portal liqManual liqAuto cuerpos bloq
+  0.5 Corral de Barro S.A.       2      0         0       0      38    0
+  1.5 Corral de Barro S.A.       2      0         0       0     112    0
+  2.5 Corral de Barro S.A.       5      1         0       0     120    1
+  3.5 Corral de Barro S.A.      11      3         0       0     120    1
+  4.5 Corral de Barro S.A.      27      8         0       0     120    1
+  5.5 Corral de Barro S.A.      27      8         0       0     120    1
+  6.5 Corral de Barro S.A.       6     14         0       0     120    1
+  7.5 Corral de Barro S.A.       6     14         0       0     119    1
+  8.5 Corral de Barro S.A.       6     14         0       0     120    1
+  9.5 Corral de Barro S.A.      19     18         0       0     120    1
+ 10.5 Corral de Barro S.A.      19     18         0       0     120    1
+ 11.5 Corral de Barro S.A.      31     22         0       0     120    1
+ 12.5 Corral de Barro S.A.      37     24         0       0     119    1
+ 13.5 Corral de Barro S.A.      47     27         0       0     120    1
+ 14.5 Corral de Barro S.A.      14     32         0       0     120    1
+ 15.5 Corral de Barro S.A.      20     34         0       0     120    1
+ 16.5 Corral de Barro S.A.      34     38         0       0     120    1
+ 17.5 Corral de Barro S.A.      37     39         0       0     120    1
+ 18.5 Corral de Barro S.A.      37     39         0       0     120    1
+ 19.5 Corral de Barro S.A.      37     39         0       0     120    1
+ 20.5 Corral de Barro S.A.      46     42         0       0     120    1
+ 21.5 Corral de Barro S.A.      46     42         0       0     119    1
+ 22.5 Corral de Barro S.A.      63     47         0       0     120    1
+ 23.5 Corral de Barro S.A.      63     47         0       0     114    1
+ 24.5 Corral de Barro S.A.      73     50         0       0     120    1
+ 25.5 Corral de Barro S.A.      73     50         0       0     120    1
+ 26.5 Corral de Barro S.A.      73     50         0       0     120    1
+ 27.5 Corral de Barro S.A.      73     50         0       0     120    1
+ 28.5 Corral de Barro S.A.      73     50         0       0     120    1
+ 29.5 Corral de Barro S.A.      73     50         0       0     120    1
+ 30.5 Corral de Barro S.A.      76     51         0       0     120    1
+ 31.5 Corral de Barro S.A.      82     53         0       0     120    1
+ 32.5 Corral de Barro S.A.      96     57         0       0     120    1
+ 33.5 Corral de Barro S.A.     109     61         0       0     120    1
+ 34.5 Corral de Barro S.A.     109     61         0       0     103    1
+ 35.5 Corral de Barro S.A.     109     61         0       0     120    1
+ 36.5 Corral de Barro S.A.     109     61         0       0     120    1
+ 37.5 Corral de Barro S.A.     109     61         0       0     117    1
+ 38.5 Corral de Barro S.A.     109     61         0       0     120    1
+ 39.5 Corral de Barro S.A.     109     61         0       0     117    1
+ 40.5 Corral de Barro S.A.     109     61         0       0     120    1
+ 41.5 Corral de Barro S.A.     112     62         0       0     120    1
+ 42.5 Corral de Barro S.A.     112     62         0       0     120    1
+ 43.5 Corral de Barro S.A.     115     63         0       0     120    1
+ 44.5 Corral de Barro S.A.     121     65         0       0     120    1
+ 45.5 Corral de Barro S.A.     124     66         0       0     117    1
+ 46.5 Corral de Barro S.A.     130     68         0       0     120    1
+ 47.5 Corral de Barro S.A.     130     68         0       0     120    1
+ 48.5 Corral de Barro S.A.     130     68         0       0     117    1
+ 49.5 Corral de Barro S.A.     130     68         0       0     120    1
+ 50.5 Corral de Barro S.A.     136     70         0       0     116    1
+ 51.5 Corral de Barro S.A.     136     70         0       0     120    1
+ 52.5 Corral de Barro S.A.     152     75         0       0     120    1
+ 53.5 Corral de Barro S.A.     152     75         0       0     120    1
+ 54.5 Corral de Barro S.A.     155     76         0       0     120    1
+ 55.5 Corral de Barro S.A.     158     77         0       0     106    1
+ 56.5 Corral de Barro S.A.     158     77         0       0     120    1
+ 57.5 Corral de Barro S.A.     173     82         0       0     120    1
+ 58.5 Corral de Barro S.A.     173     82         0       0     120    1
+ 59.5 Corral de Barro S.A.     173     82         0       0     120    1
+hitos por edad:
+desglose al fin:
+  por tipo: {"corn":120}
+  por lugar: {"ground":108,"channel":12,"converterFront":0,"siloMouth":0,"blockedProducer":0} (cuerpos activos=120)
+  ingresos separados: portal=261 manual=0 auto=0
+resumen: edad=Corral de Barro S.A. entregas=82 liquidados=0
+
+=== Completa ===
+  min edad            dinero portal liqManual liqAuto cuerpos bloq
+  0.5 Corral de Barro S.A.       2      0         0       0      38    0
+  1.5 Corral de Barro S.A.       8      2         0       0     110    0
+  2.5 Corral de Barro S.A.       8      2         0       0     120    1
+  3.5 Corral de Barro S.A.      35     10         0       0     120    1
+  4.5 Corral de Barro S.A.       1     12         0       0     119    1
+  5.5 Corral de Barro S.A.      28     20         0       0     120    1
+  6.5 Corral de Barro S.A.      34     36         0       0     120    1
+  7.5 Corral de Barro S.A.      34     36         0       0     120    1
+  8.5 Corral de Barro S.A.      55     42         0       0     120    1
+  9.5 Corral de Barro S.A.      55     42         0       0     120    1
+ 10.5 Corral de Barro S.A.      67     46         0       0     120    1
+ 11.5 Corral de Barro S.A.      67     46         0       0     120    1
+ 12.5 Corral de Barro S.A.      70     47         0       0     119    1
+ 13.5 Corral de Barro S.A.      73     48         0       0     120    1
+ 14.5 Corral de Barro S.A.      73     48         0       0     120    1
+ 15.5 Corral de Barro S.A.      73     48         0       0     116    1
+ 16.5 Corral de Barro S.A.      76     49         0       0     120    1
+ 17.5 Corral de Barro S.A.      79     50         0       0     120    1
+ 18.5 Corral de Barro S.A.      85     52         0       0     120    1
+ 19.5 Corral de Barro S.A.     101     57         0       0     120    1
+ 20.5 Corral de Barro S.A.     118     62         0       0     120    1
+ 21.5 Corral de Barro S.A.     121     63         0       0     120    1
+ 22.5 Corral de Barro S.A.     127     65         0       0     120    1
+ 23.5 Corral de Barro S.A.     127     65         0       0     109    1
+ 24.5 Corral de Barro S.A.     130     66         0       0     120    1
+ 25.5 Corral de Barro S.A.     136     68         0       0     118    1
+ 26.5 Corral de Barro S.A.     136     68         0       0     120    1
+ 27.5 Corral de Barro S.A.     142     70         0       0     120    1
+ 28.5 Corral de Barro S.A.     145     71         0       0     111    1
+ 29.5 Corral de Barro S.A.     148     72         0       0     120    1
+ 30.5 Corral de Barro S.A.     157     75         0       0     120    1
+ 31.5 Corral de Barro S.A.     163     77         0       0     120    1
+ 32.5 Corral de Barro S.A.     166     78         0       0     120    1
+ 33.5 Corral de Barro S.A.     175     81         0       0     120    1
+ 34.5 Granero de Madera S.A.       3     88         0       0     117    1
+ 35.5 Granero de Madera S.A.       3     88         0       0     120    1
+ 36.5 Granero de Madera S.A.      19     91         0       0     120    1
+ 37.5 Granero de Madera S.A.      51     97         0       0     117    1
+ 38.5 Granero de Madera S.A.      51     97         0       0     120    1
+ 39.5 Granero de Madera S.A.      51    108         0       0     120    1
+ 40.5 Granero de Madera S.A.       1    110         0       0     119    1
+ 41.5 Granero de Madera S.A.      32    115         0       0     120    1
+ 42.5 Granero de Madera S.A.     102    125         0       0     120    1
+ 43.5 Granero de Madera S.A.     102    125         0       0     120    1
+ 44.5 Granero de Madera S.A.     128    130         0       0     120    1
+ 45.5 Granero de Madera S.A.     169    137         0       0     120    1
+ 46.5 Granero de Madera S.A.     196    141         0       0     120    1
+ 47.5 Granero de Madera S.A.     218    144         0       0     120    1
+ 48.5 Granero de Madera S.A.     245    147         0       0     114    1
+ 49.5 Granero de Madera S.A.     276    152         0       0     120    1
+ 50.5 Granero de Madera S.A.     312    158         0       0     120    1
+ 51.5 Granero de Madera S.A.     312    158         0       0     120    1
+ 52.5 Granero de Madera S.A.     390    172         0       0     120    1
+ 53.5 Granero de Madera S.A.     458    182         0       0     117    1
+ 54.5 Granero de Madera S.A.     469    184         0       0     120    1
+ 55.5 Granero de Madera S.A.     501    189         0       0     120    1
+ 56.5 Granero de Madera S.A.     511    190         0       0     120    1
+ 57.5 Granero de Madera S.A.     516    191         0       0     120    1
+ 58.5 Granero de Madera S.A.     531    194         0       0     120    1
+ 59.5 Granero de Madera S.A.     531    194         0       0     120    1
+hitos por edad:
+  34.4min ÔåÆ sube a Granero de Madera S.A. (dinero=3)
+desglose al fin:
+  por tipo: {"corn":115}
+  por lugar: {"ground":103,"channel":12,"converterFront":0,"siloMouth":0,"blockedProducer":0} (cuerpos activos=115)
+  ingresos separados: portal=954 manual=0 auto=0
+resumen: edad=Granero de Madera S.A. entregas=197 liquidados=0
+
+=== ConLimpieza ===
+  min edad            dinero portal liqManual liqAuto cuerpos bloq
+  0.5 Corral de Barro S.A.       2      0         0       0      38    0
+  1.5 Corral de Barro S.A.      37      0         0       0      50    0
+  2.5 Corral de Barro S.A.      90      2         0       0      49    0
+  3.5 Corral de Barro S.A.     188      2         0       0      49    0
+  4.5 Granero de Madera S.A.      32      5         0       0      50    0
+  5.5 Granero de Madera S.A.      80      6         0       0      50    0
+  6.5 Granero de Madera S.A.     179      6         0       0      50    0
+  7.5 Granero de Madera S.A.     282      7         0       0      51    0
+  8.5 Granero de Madera S.A.     382      7         0       0      50    0
+  9.5 Granero de Madera S.A.     485      8         0       0      49    0
+ 10.5 Granero de Madera S.A.     586      9         0       0      50    0
+ 11.5 Granero de Madera S.A.     706     14         0       0      48    0
+ 12.5 Granero de Madera S.A.     806     15         0       0      49    0
+ 13.5 Granero de Madera S.A.     904     15         0       0      50    0
+ 14.5 Granero de Madera S.A.    1015     17         0       0      49    0
+ 15.5 Granero de Madera S.A.    1125     20         0       0      49    0
+ 16.5 Granero de Madera S.A.    1222     20         0       0      50    0
+ 17.5 Granero de Madera S.A.    1345     23         0       0      49    0
+ 18.5 Granero de Madera S.A.    1443     23         0       0      50    0
+ 19.5 Granero de Madera S.A.    1542     23         0       0      51    0
+ 20.5 Granja de Piedra S.A.      50     24         0       0      49    0
+ 21.5 Granja de Piedra S.A.      18     24         0       0      50    0
+ 22.5 Granja de Piedra S.A.     132     26         0       0      50    0
+ 23.5 Granja de Piedra S.A.     238     27         0       0      50    0
+ 24.5 Granja de Piedra S.A.     360     29         0       0      49    0
+ 25.5 Granja de Piedra S.A.     458     29         0       0      51    0
+ 26.5 Granja de Piedra S.A.     573     31         0       0      50    0
+ 27.5 Granja de Piedra S.A.     687     33         0       0      50    0
+ 28.5 Granja de Piedra S.A.     800     35         0       0      51    0
+ 29.5 Granja de Piedra S.A.     900     35         0       0      50    0
+ 30.5 Granja de Piedra S.A.    1014     37         0       0      49    0
+ 31.5 Granja de Piedra S.A.    1112     37         0       0      51    0
+ 32.5 Granja de Piedra S.A.    1227     38         0       0      50    0
+ 33.5 Granja de Piedra S.A.    1326     38         0       0      50    0
+ 34.5 Granja de Piedra S.A.    1425     38         0       0      51    0
+ 35.5 Granja de Piedra S.A.    1525     38         0       0      49    0
+ 36.5 Granja de Piedra S.A.    1622     38         0       0      49    0
+ 37.5 Granja de Piedra S.A.    1727     39         0       0      50    0
+ 38.5 Granja de Piedra S.A.    1825     39         0       0      49    0
+ 39.5 Granja de Piedra S.A.    1931     40         0       0      48    0
+ 40.5 Granja de Piedra S.A.    2027     40         0       0      50    0
+ 41.5 Granja de Piedra S.A.    2126     40         0       0      49    0
+ 42.5 Granja de Piedra S.A.    2223     40         0       0      49    0
+ 43.5 Granja de Piedra S.A.    2343     43         0       0      49    0
+ 44.5 Granja de Piedra S.A.    2463     45         0       0      48    0
+ 45.5 Granja de Piedra S.A.    2560     45         0       0      49    0
+ 46.5 Granja de Piedra S.A.    2664     46         0       0      50    0
+ 47.5 Granja de Piedra S.A.    2763     46         0       0      49    0
+ 48.5 Granja de Piedra S.A.    2868     47         0       0      48    0
+ 49.5 Granja de Piedra S.A.    2980     49         0       0      49    0
+ 50.5 Granja de Piedra S.A.    3077     49         0       0      49    0
+ 51.5 Granja de Piedra S.A.    3205     53         0       0      49    0
+ 52.5 Granja de Piedra S.A.    3302     53         0       0      50    0
+ 53.5 Granja de Piedra S.A.    3433     56         0       0      47    0
+ 54.5 Granja de Piedra S.A.    3528     56         0       0      50    0
+ 55.5 Granja de Piedra S.A.    3634     57         0       0      49    0
+ 56.5 Granja de Piedra S.A.    3731     57         0       0      50    0
+ 57.5 Granja de Piedra S.A.    3843     59         0       0      49    0
+ 58.5 Granja de Piedra S.A.    3940     59         0       0      51    0
+ 59.5 Granja de Piedra S.A.    4060     62         0       0      49    0
+hitos por edad:
+  4.0min ÔåÆ sube a Granero de Madera S.A. (dinero=92)
+  20.0min ÔåÆ sube a Granja de Piedra S.A. (dinero=42)
+desglose al fin:
+  por tipo: {"corn":96}
+  por lugar: {"ground":86,"channel":10,"converterFront":0,"siloMouth":0,"blockedProducer":0} (cuerpos activos=96)
+  ingresos separados: portal=476 manual=0 auto=0
+resumen: edad=Granja de Piedra S.A. entregas=62 liquidados=5722
+
+=== Basura ===
+  min edad            dinero portal liqManual liqAuto cuerpos bloq
+  0.5 Corral de Barro S.A.      20      0         0       0      38    0
+  1.5 Corral de Barro S.A.      20      0         0       0     112    0
+  2.5 Corral de Barro S.A.      20      0         0       0     120    1
+  3.5 Corral de Barro S.A.      20      0         0       0     120    1
+  4.5 Corral de Barro S.A.      20      0         0       0     104    1
+  5.5 Corral de Barro S.A.      20      0         0       0     120    1
+  6.5 Corral de Barro S.A.      20      0         0       0     114    1
+  7.5 Corral de Barro S.A.      20      0         0       0     120    1
+  8.5 Corral de Barro S.A.      20      0         0       0     120    1
+  9.5 Corral de Barro S.A.      20      0         0       0     119    1
+ 10.5 Corral de Barro S.A.      20      0         0       0     120    1
+ 11.5 Corral de Barro S.A.      20      0         0       0     120    1
+ 12.5 Corral de Barro S.A.      20      0         0       0     120    1
+ 13.5 Corral de Barro S.A.      20      0         0       0     120    1
+ 14.5 Corral de Barro S.A.      20      0         0       0     109    1
+ 15.5 Corral de Barro S.A.      20      0         0       0     120    1
+ 16.5 Corral de Barro S.A.      20      0         0       0     120    1
+ 17.5 Corral de Barro S.A.      20      0         0       0     119    1
+ 18.5 Corral de Barro S.A.      20      0         0       0     120    1
+ 19.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 20.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 21.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 22.5 Corral de Barro S.A.      23      1         0       0     118    1
+ 23.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 24.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 25.5 Corral de Barro S.A.      23      1         0       0     118    1
+ 26.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 27.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 28.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 29.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 30.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 31.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 32.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 33.5 Corral de Barro S.A.      23      1         0       0     118    1
+ 34.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 35.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 36.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 37.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 38.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 39.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 40.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 41.5 Corral de Barro S.A.      23      1         0       0     110    1
+ 42.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 43.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 44.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 45.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 46.5 Corral de Barro S.A.      23      1         0       0     118    1
+ 47.5 Corral de Barro S.A.      23      1         0       0     118    1
+ 48.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 49.5 Corral de Barro S.A.      23      1         0       0     120    1
+ 50.5 Corral de Barro S.A.      23      1         0       0     115    1
+ 51.5 Corral de Barro S.A.      26      2         0       0     120    1
+ 52.5 Corral de Barro S.A.      26      2         0       0     120    1
+ 53.5 Corral de Barro S.A.      26      2         0       0     120    1
+ 54.5 Corral de Barro S.A.      26      2         0       0     120    1
+ 55.5 Corral de Barro S.A.      26      2         0       0     101    1
+ 56.5 Corral de Barro S.A.      26      2         0       0     120    1
+ 57.5 Corral de Barro S.A.      35      5         0       0     120    1
+ 58.5 Corral de Barro S.A.      35      5         0       0     120    1
+ 59.5 Corral de Barro S.A.      35      5         0       0     120    1
+hitos por edad:
+desglose al fin:
+  por tipo: {"corn":98}
+  por lugar: {"ground":98,"channel":0,"converterFront":0,"siloMouth":0,"blockedProducer":0} (cuerpos activos=98)
+  ingresos separados: portal=15 manual=0 auto=0
+resumen: edad=Corral de Barro S.A. entregas=5 liquidados=0
+
+determinismo (misma semilla ├ù2): OK
+
+trayectoria del ma├¡z: emite en z=-3.51, para en z=-4.30 (avanza 0.79 celdas, portal en z=-8.6)
+  Portal faltante: -4.25. El ma├¡z se queda a 0.79 de haber salido del sembrador.
+
+Reporte: balance-report.json + balance-report.csv
