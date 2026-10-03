@@ -261,12 +261,19 @@ function buildProducerGeo(type, age = 0) {
     // (este); cada entrada tiene su colador tricolor sobre la cara abierta.
     v.add(0.86, 0.78, 0.86, 0, 0.39, 0, '#6e5a46');
     v.add(0.7, 0.14, 0.7, 0, 0.84, 0, GOLD);
-    v.add(0.22, 0.4, 0.22, -0.22, 0.95, 0.12, '#9a9aa2');
-    v.add(0.22, 0.4, 0.22, 0.22, 0.95, 0.12, '#9a9aa2');
-    mouthBox(v, 0.42);
-    // Entradas por costado: hueco oscuro c/rio central y colosine arriba.
+    v.add(0.22, 0.4, 0.22, -0.22, 0.95, 0.12, '#9a9aa2'); // tolva izquierda (maíz)
+    v.add(0.22, 0.4, 0.22, 0.22, 0.95, 0.12, '#9a9aa2'); // tolva derecha (calabaza)
+    // Boca frontal sobresale (casco llega a −0.43; la boca queda afuera).
+    v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
+    v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
+    // Entradas por costado: hueco dark + tinte del ingrediente en la mitad
     v.add(0.5, 0.3, 0.1, -0.42, 0.42, 0.42, TEAL); // trasera izquierda (oeste→maíz)
     v.add(0.5, 0.3, 0.1, 0.42, 0.42, 0.42, '#e08a3c'); // trasera derecha (este→calabaza)
+    // Ícono voxel del ingrediente contra la cara lateral (inspirado ayuda daltonico)
+    v.add(0.16, 0.16, 0.16, -0.58, 0.52, 0, '#f2c94c'); // maíz al oeste (amarillo)
+    v.add(0.06, 0.06, 0.06, -0.58, 0.62, 0, '#7fae4a');
+    v.add(0.2, 0.18, 0.2, 0.58, 0.52, 0, '#e08a3c'); // calabaza al este (naranja)
+    v.add(0.08, 0.08, 0.08, 0.58, 0.62, 0, '#5c8a2a');
   } else if (type === 'corral') {
     const fence = '#8a5f36';
     for (const px of [-0.42, 0.42]) {
@@ -312,10 +319,12 @@ function buildProducerGeo(type, age = 0) {
     // -0.36/-0.38 quedaría enterrada dentro del casco (era el bug visual).
     v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
     v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
-    // Entradas por costado en la trasera: trasera W (cerdo) con tinte rosa y
-    // trasera E (sal) con tinte bizco/co; recuerdo del lado de cada ingrediente.
-    v.add(0.45, 0.3, 0.12, -0.5, 0.44, 0.52, '#f4a8bd');
-    v.add(0.45, 0.3, 0.12, 0.5, 0.44, 0.52, '#ececf0');
+    // Entradas por costado (M1.5-F5): hueco lateral W (cerdo) y E (sal).
+    v.add(0.12, 0.3, 0.45, -0.48, 0.44, 0, '#f4a8bd'); // oeste: cerdo (rosa)
+    v.add(0.12, 0.3, 0.45, 0.48, 0.44, 0, '#ececf0'); // este: sal (blanca)
+    // Ícono del ingrediente a cada lado (pata del cerdito y cristal de sal).
+    v.add(0.12, 0.12, 0.12, -0.58, 0.5, 0, '#e07b96');
+    v.add(0.12, 0.12, 0.12, 0.58, 0.5, 0, '#ffffff');
   } else if (type === 'silo') {
     // M1.5-F4: tanque vertical con entrada trasera (oscura) y boca frontal
     // (dorada): aberturas físicas distintas para cada lado.
