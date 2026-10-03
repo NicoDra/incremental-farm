@@ -88,6 +88,15 @@ const BUILDERS = {
   ham: hamGeometry,
 };
 
+// M1.5-F5: geometría compartida de cada producto para reutilizarla en el mesh
+// flotante de la entrada de las recetas dobles (sin instanciar).
+const GEO_CACHE = new Map();
+export function getProductGeo(kind) {
+  if (!BUILDERS[kind]) return null;
+  if (!GEO_CACHE.has(kind)) GEO_CACHE.set(kind, BUILDERS[kind]());
+  return GEO_CACHE.get(kind);
+}
+
 export class ProductRenderer {
   constructor(scene) {
     const mat = voxelMaterial();

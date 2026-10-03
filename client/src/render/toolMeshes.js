@@ -13,6 +13,7 @@ import {
   computeLevelOpenings,
 } from 'chanchos-shared';
 import { voxelBuilder, voxelMaterial } from './voxel.js';
+import { getProductGeo } from './products.js';
 
 const RAMP_TILT = -Math.PI / 4; // -45°: baja hacia el frente local (-z)
 
@@ -266,14 +267,10 @@ function buildProducerGeo(type, age = 0) {
     // Boca frontal sobresale (casco llega a −0.43; la boca queda afuera).
     v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
     v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
-    // Entradas por costado: hueco dark + tinte del ingrediente en la mitad
+    // Entradas por costado: hueco dark + tinte del ingrediente en la mitad.
+    // Sin íconos pegados al cuerpo: esos van en el grupo y flotan con las flechas.
     v.add(0.5, 0.3, 0.1, -0.42, 0.42, 0.42, TEAL); // trasera izquierda (oeste→maíz)
     v.add(0.5, 0.3, 0.1, 0.42, 0.42, 0.42, '#e08a3c'); // trasera derecha (este→calabaza)
-    // Ícono voxel del ingrediente contra la cara lateral (inspirado ayuda daltonico)
-    v.add(0.16, 0.16, 0.16, -0.58, 0.52, 0, '#f2c94c'); // maíz al oeste (amarillo)
-    v.add(0.06, 0.06, 0.06, -0.58, 0.62, 0, '#7fae4a');
-    v.add(0.2, 0.18, 0.2, 0.58, 0.52, 0, '#e08a3c'); // calabaza al este (naranja)
-    v.add(0.08, 0.08, 0.08, 0.58, 0.62, 0, '#5c8a2a');
   } else if (type === 'corral') {
     const fence = '#8a5f36';
     for (const px of [-0.42, 0.42]) {
@@ -319,12 +316,10 @@ function buildProducerGeo(type, age = 0) {
     // -0.36/-0.38 quedaría enterrada dentro del casco (era el bug visual).
     v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
     v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
-    // Entradas por costado (M1.5-F5): hueco lateral W (cerdo) y E (sal).
+    // Entradas por costado (M1.5-F5): hueco lateral W (cerdo) y E (sal), sin
+    // íconos incrustados: esos van en el grupo y flotan arriba como las flechas.
     v.add(0.12, 0.3, 0.45, -0.48, 0.44, 0, '#f4a8bd'); // oeste: cerdo (rosa)
     v.add(0.12, 0.3, 0.45, 0.48, 0.44, 0, '#ececf0'); // este: sal (blanca)
-    // Ícono del ingrediente a cada lado (pata del cerdito y cristal de sal).
-    v.add(0.12, 0.12, 0.12, -0.58, 0.5, 0, '#e07b96');
-    v.add(0.12, 0.12, 0.12, 0.58, 0.5, 0, '#ffffff');
   } else if (type === 'silo') {
     // M1.5-F4: tanque vertical con entrada trasera (oscura) y boca frontal
     // (dorada): aberturas físicas distintas para cada lado.
@@ -516,7 +511,7 @@ export class ToolManager {
         // M1.5-F5: con recetas por costado hay una flecha teal por entrada;
         // de lo contrario y para silo queda una sola trasera.
         const sides = def.inputSides ? Object.values(def.inputSides) : ['back'];
-        for (const side of sides) {
+        for (const [kind, side] of Object.entries(def.inputSides || { default: 'back' })) {
           const inp = mouthArrow(TEAL, 0.85);
           if (side === 'left') { inp.position.set(-0.78, 0.45, 0); inp.rotation.y = -Math.PI / 2; }
           else if (side === 'right') { inp.position.set(0.78, 0.45, 0); inp.rotation.y = Math.PI / 2; }
@@ -524,6 +519,18 @@ export class ToolManager {
           else { inp.position.set(0, 0.45, 0.78); inp.rotation.y = Math.PI; }
           group.add(inp);
           arrows.push(inp);
+          // M1.5-F5 icono flotante: mini item voxel del ingrediente sobre la entrada,
+          // siguiendo la misma regla de visibilidad (G/selección/hover).
+          const geo = getProductGeo(kind);
+          if (geo) {
+            const icon = new THREE.Mesh(geo, voxelMaterial({ transparent: true, opacity: 0.85 }));
+            const pos = inp.position;
+            icon.position.set(pos.x * 1.18, 1.25, pos.z * 1.18);
+            icon.scale.setScalar(0.55);
+            group.add(icon);
+            arrows.push(icon);
+            icon.userData.isIcon = true;
+          }
         }
       }
     } else if (type === 'union') {
@@ -721,14 +728,21 @@ export class ToolManager {
       out.position.set(0, 0.45, -0.78);
       g.add(out);
       if (def.kind === 'converter' || def.kind === 'silo') {
-        const sides = def.inputSides ? Object.values(def.inputSides) : ['back'];
-        for (const side of sides) {
+        for (const [kind, side] of Object.entries(def.inputSides || { default: 'back' })) {
           const inp = new THREE.Mesh(chevronGeo(0.85), this.ghostArrowMats.in);
           if (side === 'left') { inp.position.set(-0.78, 0.45, 0); inp.rotation.y = -Math.PI / 2; }
           else if (side === 'right') { inp.position.set(0.78, 0.45, 0); inp.rotation.y = Math.PI / 2; }
           else if (side === 'front') { inp.position.set(0, 0.45, -0.78); inp.rotation.y = 0; }
           else { inp.position.set(0, 0.45, 0.78); inp.rotation.y = Math.PI; }
           g.add(inp);
+          // ícono del ingrediente sobre la entrada (mismo preview que la flecha)
+          const geo = getProductGeo(kind);
+          if (kind !== 'default' && geo) {
+            const icon = new THREE.Mesh(geo, voxelMaterial({ transparent: true, opacity: 0.85 }));
+            icon.position.set(inp.position.x * 1.18, 1.25, inp.position.z * 1.18);
+            icon.scale.setScalar(0.55);
+            g.add(icon);
+          }
         }
       }
     } else if (type === 'union') {
