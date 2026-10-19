@@ -1,0 +1,69 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e3]:
+    - strong [ref=e4]: Taller de modelos
+    - generic [ref=e5]:
+      - text: Época
+      - combobox "Época" [ref=e6]:
+        - option "Barro" [selected]
+        - option "Madera"
+        - option "Piedra"
+        - option "Fábrica"
+    - generic [ref=e7]:
+      - text: Vista
+      - combobox "Vista" [ref=e8]:
+        - option "Isométrica" [selected]
+        - option "Frontal"
+        - option "Posterior"
+        - option "Superior"
+    - generic [ref=e9]:
+      - text: Modelo
+      - combobox "Modelo" [ref=e10]:
+        - option "Todos" [selected]
+        - option "Granero"
+        - option "Canaleta Recta"
+        - option "Canaleta Curva"
+        - option "Rampa de Bajada"
+        - option "Embudo"
+        - option "Canaleta Rebote"
+        - option "Unión Y/T"
+        - option "Divisor"
+        - option "Puente"
+        - option "Ventilador Corporativo"
+        - option "Sembrador 3000"
+        - option "Calabacera S.R.L."
+        - option "Salinera Industrial"
+        - option "Planta de Mezcla"
+        - option "Corral Ejecutivo"
+        - option "Palomitera 2000"
+        - option "Jamonera Industrial"
+        - option "Curadora de Jambros"
+        - option "Silo Amortiguador"
+    - link "Volver al juego" [ref=e11] [cursor=pointer]:
+      - /url: /
+  - generic:
+    - generic: Canaleta Recta
+    - generic: Canaleta Curva
+    - generic: Rampa de Bajada
+    - generic: Embudo
+    - generic: Canaleta Rebote
+    - generic: Unión Y/T
+    - generic: Divisor
+    - generic: Puente
+    - generic: Ventilador Corporativo
+    - generic: Sembrador 3000
+    - generic: Calabacera S.R.L.
+    - generic: Salinera Industrial
+    - generic: Planta de Mezcla
+    - generic: Corral Ejecutivo
+    - generic: Palomitera 2000
+    - generic: Jamonera Industrial
+    - generic: Curadora de Jambros
+    - generic: Silo Amortiguador
+    - generic: Choclo Premium
+    - generic: Calabaza Gerencial
+    - generic: Sal Industrial
+    - generic: Pienso Balanceado
+    - generic: Palomita Motivacional
+    - generic: Cerdito Ejecutivo
+    - generic: Jamón Premium Plus
+  - contentinfo [ref=e12]: Arrastrá para orbitar · rueda para acercar · productos ampliados ×1.6

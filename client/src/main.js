@@ -24,6 +24,8 @@ import {
 } from 'chanchos-shared';
 import { createScene } from './render/scene.js';
 import { ParcelRenderer } from './render/parcel.js';
+import { LandscapeRenderer } from './render/landscape.js';
+import { fitGroundView } from './render/groundCamera.js';
 import { ProductRenderer } from './render/products.js';
 import { ToolManager } from './render/toolMeshes.js';
 import { Fx } from './render/fx.js';
@@ -56,6 +58,7 @@ async function boot() {
   const sim = new SimWorld();
   const view = createScene(canvas);
   const parcel = new ParcelRenderer(view.scene);
+  const landscape = new LandscapeRenderer(view.scene);
   const productR = new ProductRenderer(view.scene);
   const toolsR = new ToolManager(view.scene);
   const fx = new Fx(view.scene, document.getElementById('floats'), view.camera, view.renderer);
@@ -170,8 +173,8 @@ async function boot() {
 
   // M1.5-B/C: el 4º param meta (jumbo×2, multiplicadores) es obligatorio.
   sim.onDeliver = (kind, pos, nowMs, meta) => {
+    parcel.notifyDelivery(nowMs);
     const res = state.registerDelivery(kind, nowMs, meta);
-    parcel.openDoors();
     fx.burst(pos.x, 1, pos.z, 0xf2c94c);
     fx.float(
       pos.x,
@@ -1639,9 +1642,11 @@ async function boot() {
 
     updateCamera(dt);
     view.controls.update();
+    fitGroundView(view.camera, view.controls.target, view.scene.fog);
+    landscape.update(view.camera, dt, view.controls.target);
     productR.sync(sim.products);
     toolsR.update(t, sim.tools, t);
-    parcel.updateDoors();
+    parcel.updateDoors(t);
     fx.update(dt, t);
     hud.update(t);
     view.renderer.render(view.scene, view.camera);

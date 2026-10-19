@@ -464,13 +464,14 @@ export class Hud {
       const list = document.createElement('div');
       list.className = 'sel-sub';
       for (const g of goal) {
-        // M1.5-J1 fix: el contador se clava en la meta una vez cumplida.
-        // Antes seguía sumando (p. ej. 198/30 ✓), que leía como bug de ritmo.
+        // El progreso visual tiene tope; el total real sigue disponible para
+        // calibrar el desfase entre requisitos económicos y de productos.
         const have = Math.min(s.deliveredKinds?.[g.kind] || 0, g.count);
         const done = have >= g.count;
         const cell = document.createElement('div');
         cell.className = 'sel-sub';
         cell.textContent = `${PRODUCTS[g.kind].name}: ${have}/${g.count}${done ? ' ✓' : ''}`;
+        cell.title = `Entregas reales: ${s.deliveredKinds?.[g.kind] || 0}. Requisito: ${g.count}.`;
         const bar = document.createElement('div');
         bar.className = 'sel-meter';
         const fill = document.createElement('div');

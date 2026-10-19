@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { GRID_SIZE, HALF_GRID, GAP_CELLS } from 'chanchos-shared';
 import { voxelBuilder, voxelMaterial } from './voxel.js';
+import { buildWallGeometry } from './wallModels.js';
 
 export const PALETTES = [
   { floor: '#7a5236', wall: '#8d6244', sky: '#bfd9e8' }, // barro
@@ -19,8 +20,9 @@ const MOOD = [
   { hemiSky: '#c9d2e2', hemiGround: '#4a5060', sun: '#ffe9b8', sunI: 1.55, fog: '#8fa4bc' }, // Fábrica: industrial cálido
 ];
 
-function hash01(i, j) {
-  return (((i * 73856093) ^ (j * 19349663)) % 100) / 100;
+export function hash01(i, j) {
+  // XOR produce enteros con signo; normalizar antes evita manchas negativas.
+  return ((Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) >>> 0) / 4294967296;
 }
 
 // M1.5-E etapa 4: cielo con gradiente vertical por época (canvas 2x256,
@@ -108,6 +110,11 @@ function gateStyle(age) {
   return GATE_STYLE[Math.max(0, Math.min(age || 0, GATE_STYLE.length - 1))];
 }
 
+const DEPOT_OPEN_ANGLE = 95 * Math.PI / 180;
+const DEPOT_DELIVERY_SWING = 5 * Math.PI / 180;
+const DEPOT_PULSE_MS = 700;
+const DEPOT_PULSE_COOLDOWN_MS = 1100;
+
 // Devuelve { body, doorL, doorR } — tres meshes separados.
 // doorL/doorR rotan sobre eje Y; su pivote está en la bisagra (borde interior).
 function buildDepotGate(age = 0) {
@@ -136,7 +143,14 @@ function buildDepotGate(age = 0) {
   // ── cuerpo (todo excepto las hojas de puerta) ─────────────────────────────
   const vb = voxelBuilder();
   // paredes
-  vb.add(W * 2, WH, 0.16, 0, WH / 2, bz, WOOD_L);
+  vb.add(W * 2, WH, 0.16, 0, WH / 2, bz, WOOD_D);
+  // Recepción vacía pero construida: piso interior y estructura del fondo.
+  // No se simula un inventario visible que el jugador no podría recuperar.
+  vb.add(W * 2, 0.10, DEPTH, 0, -0.04, midZ, '#706657');
+  for (const x of [-2.75, 2.75]) {
+    vb.add(0.16, WH, 0.16, x, WH / 2, bz + 0.16, DOOR_BAR);
+  }
+  vb.add(W * 2 - 0.32, 0.10, 0.14, 0, WH - 0.10, bz + 0.16, DOOR_BAR);
   // Costados segmentados alrededor de las ventanas: los marcos tienen vano.
   const sideSpan = (DEPTH - 0.66) / 2;
   for (const x of [-W, W]) {
@@ -300,11 +314,12 @@ function buildDepotGate(age = 0) {
     group.add(m);
     // bisagra en x = ±(DW - JT/2), y=0, z=fz+0.06
     group.position.set(sx * (DW - JT / 2), 0, fz + 0.06);
+    group.rotation.y = -sx * DEPOT_OPEN_ANGLE;
     return group;
   }
 
-  const doorL = buildLeaf(-1); // bisagra en x = -(DW-JT/2), hoja hacia -x
-  const doorR = buildLeaf( 1); // bisagra en x = +(DW-JT/2), hoja hacia +x
+  const doorL = buildLeaf(-1);
+  const doorR = buildLeaf( 1);
 
   return { body, doorL, doorR };
 }
@@ -332,20 +347,24 @@ export class ParcelRenderer {
     // Muros perimetrales (la fila norte saltea la brecha del depósito)
     const wallCells = [];
     for (let i = 0; i < GRID_SIZE; i++) {
-      if (!GAP_CELLS.includes(i)) wallCells.push([i, -1]); // norte
-      wallCells.push([i, GRID_SIZE]); // sur
-      wallCells.push([-1, i]); // oeste
-      wallCells.push([GRID_SIZE, i]); // este
+      if (!GAP_CELLS.includes(i)) wallCells.push([i, -1, 0]); // norte
+      wallCells.push([i, GRID_SIZE, 0]); // sur
+      wallCells.push([-1, i, Math.PI / 2]); // oeste
+      wallCells.push([GRID_SIZE, i, Math.PI / 2]); // este
     }
-    const wallGeo = new THREE.BoxGeometry(0.98, 1.2, 0.98);
+    for (const i of [-1, GRID_SIZE]) for (const j of [-1, GRID_SIZE]) wallCells.push([i, j, 0]);
+    const wallGeo = buildWallGeometry(0, PALETTES[0].wall);
     this.wallMesh = new THREE.InstancedMesh(
       wallGeo,
-      new THREE.MeshLambertMaterial({ color: '#ffffff' }),
+      voxelMaterial(),
       wallCells.length,
     );
+    this.wallMesh.name = 'perimeter-walls';
+    this._wallAge = 0;
     this.wallMesh.castShadow = true;
     this.wallMesh.receiveShadow = true;
-    wallCells.forEach(([i, j], idx) => {
+    wallCells.forEach(([i, j, yaw], idx) => {
+      m.makeRotationY(yaw);
       m.setPosition(i - HALF_GRID + 0.5, 0.6, j - HALF_GRID + 0.5);
       this.wallMesh.setMatrixAt(idx, m);
     });
@@ -360,10 +379,9 @@ export class ParcelRenderer {
     scene.add(this._doorL);
     scene.add(this._doorR);
 
-    // Estado de animación de puertas
-    this._doorAnim  = null;
-    this._doorAngle = 0; // ángulo actual (rad), 0=cerrado, MAX_ANGLE=abierto
     this._gateAge   = 0; // época con la que está pintado el granero
+    this._deliveryPulseStart = null;
+    this._nextDeliveryPulse = 0;
 
     // M1.5-C: bloqueo visual fuera de la zona jugable (valla de postes + velo).
     this.zoneGroup = new THREE.Group();
@@ -373,7 +391,7 @@ export class ParcelRenderer {
   }
 
   // M1.5-E: repinta el granero con la paleta de la nueva época. Reemplaza los
-  // tres meshes y libera las geometrías viejas; rearma las puertas cerradas.
+  // tres meshes y libera las geometrías viejas; conserva la recepción abierta.
   _rebuildGate(age) {
     for (const m of [this._gateBody, this._doorL, this._doorR]) {
       if (!m) continue;
@@ -387,52 +405,28 @@ export class ParcelRenderer {
     this.scene.add(this._gateBody);
     this.scene.add(this._doorL);
     this.scene.add(this._doorR);
-    this._doorAnim  = null;
-    this._doorAngle = 0;
-    this._applyDoorAngle(0);
+    this._deliveryPulseStart = null;
+    this._nextDeliveryPulse = 0;
     this._gateAge = age;
   }
 
-  // Abre las puertas brevemente (llamado desde onDeliver)
-  openDoors() {
-    this._doorAnim = { startMs: performance.now(), durationMs: 600 };
+  // Una entrega inicia un único gesto acotado. Una ráfaga no acumula ángulo
+  // ni reinicia el movimiento; el reposo entre pulsos evita vibración continua.
+  notifyDelivery(nowMs = performance.now()) {
+    if (this._deliveryPulseStart !== null || nowMs < this._nextDeliveryPulse) return false;
+    this._deliveryPulseStart = nowMs;
+    this._nextDeliveryPulse = nowMs + DEPOT_PULSE_COOLDOWN_MS;
+    return true;
   }
 
-  // Llamado cada frame desde el loop de render
-  updateDoors() {
-    const MAX_ANGLE = Math.PI / 7; // ~26° — sutil, apenas se entreabre
-    const OPEN_FRAC = 0.3;         // 30% del tiempo abriendo, 70% cerrando suave
-
-    if (!this._doorAnim) {
-      if (this._doorAngle !== 0) {
-        this._doorAngle = 0;
-        this._applyDoorAngle(0);
-      }
-      return;
-    }
-
-    const { startMs, durationMs } = this._doorAnim;
-    const t = Math.min(1, (performance.now() - startMs) / durationMs);
-
-    let angle;
-    if (t < OPEN_FRAC) {
-      const u = t / OPEN_FRAC;
-      angle = MAX_ANGLE * (1 - Math.pow(1 - u, 2)); // ease-out suave
-    } else {
-      const u = (t - OPEN_FRAC) / (1 - OPEN_FRAC);
-      angle = MAX_ANGLE * (1 - u * u);               // ease-in cierre
-    }
-
-    this._doorAngle = angle;
-    this._applyDoorAngle(angle);
-    if (t >= 1) this._doorAnim = null;
-  }
-
-  _applyDoorAngle(angle) {
-    // doorL (bisagra izquierda, x negativo): abre girando hacia -Z (interior)
-    this._doorL.rotation.y =  angle;
-    // doorR (bisagra derecha, x positivo): abre girando hacia +Z (interior)
-    this._doorR.rotation.y = -angle;
+  updateDoors(nowMs = performance.now()) {
+    if (this._deliveryPulseStart === null) return;
+    const u = Math.max(0, Math.min(1, (nowMs - this._deliveryPulseStart) / DEPOT_PULSE_MS));
+    // Tiempo absoluto, no número de frames. Velocidad cero en ambos extremos.
+    const swing = u === 1 ? 0 : DEPOT_DELIVERY_SWING * Math.sin(Math.PI * u) ** 2;
+    this._doorL.rotation.y = DEPOT_OPEN_ANGLE + swing;
+    this._doorR.rotation.y = -DEPOT_OPEN_ANGLE - swing;
+    if (u === 1) this._deliveryPulseStart = null;
   }
 
   // Dibuja anillo de postes/valla en el borde del rect + velo translúcido fuera.
@@ -450,17 +444,33 @@ export class ParcelRenderer {
     const x1 = rect.i1 - HALF_GRID + 1;
     const z0 = rect.j0 - HALF_GRID;
     const z1 = rect.j1 - HALF_GRID + 1;
+    // En el borde norte la valla se interrumpe únicamente en las celdas de
+    // entrega. Al crecer la parcela aparecen los tramos a ambos lados.
+    const northRuns = [];
+    let runStart = null;
+    for (let i = rect.i0; i <= rect.i1 + 1; i++) {
+      const solid = i <= rect.i1 && !(rect.j0 === 0 && GAP_CELLS.includes(i));
+      if (solid && runStart === null) runStart = i;
+      if (!solid && runStart !== null) {
+        northRuns.push([runStart - HALF_GRID, i - HALF_GRID]);
+        runStart = null;
+      }
+    }
     const postGeo = new THREE.BoxGeometry(0.12, 0.9, 0.12);
     const postMat = new THREE.MeshLambertMaterial({ color: '#5c4326' });
     const railMat = new THREE.MeshLambertMaterial({ color: '#8a6b45' });
-    const posts = [];
-    for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) {
-      posts.push([x, z0], [x, z1]);
+    const posts = new Map();
+    const addPost = (x, z) => posts.set(`${x},${z}`, [x, z]);
+    for (let x = Math.floor(x0); x <= Math.ceil(x1); x++) addPost(x, z1);
+    for (const [start, end] of northRuns) {
+      for (let x = start; x <= end; x++) addPost(x, z0);
     }
     for (let z = Math.floor(z0); z <= Math.ceil(z1); z++) {
-      posts.push([x0, z], [x1, z]);
+      // Los postes laterales terminan en el borde del vano, nunca dentro.
+      addPost(x0, z);
+      addPost(x1, z);
     }
-    for (const [px, pz] of posts) {
+    for (const [px, pz] of posts.values()) {
       const p = new THREE.Mesh(postGeo, postMat);
       p.position.set(px, 0.45, pz);
       this.zoneGroup.add(p);
@@ -472,7 +482,7 @@ export class ParcelRenderer {
       r.position.set(px, railY, pz);
       this.zoneGroup.add(r);
     };
-    mkRail(x1 - x0, 0.08, (x0 + x1) / 2, z0);
+    for (const [start, end] of northRuns) mkRail(end - start, 0.08, (start + end) / 2, z0);
     mkRail(x1 - x0, 0.08, (x0 + x1) / 2, z1);
     mkRail(0.08, z1 - z0, x0, (z0 + z1) / 2);
     mkRail(0.08, z1 - z0, x1, (z0 + z1) / 2);
@@ -499,16 +509,25 @@ export class ParcelRenderer {
   applyLevel(level) {
     const pal = PALETTES[Math.min(level, PALETTES.length - 1)];
     if (this._gateAge !== level) this._rebuildGate(level);
+    if (this._wallAge !== level) {
+      const old = this.wallMesh.geometry;
+      this.wallMesh.geometry = buildWallGeometry(level, pal.wall);
+      old.dispose();
+      this._wallAge = level;
+      this.wallMesh.computeBoundingSphere();
+    }
     const c = new THREE.Color();
     for (let idx = 0; idx < this.floorMesh.count; idx++) {
-      const i = idx % GRID_SIZE;
-      const j = Math.floor(idx / GRID_SIZE);
+      const i = Math.floor(idx / GRID_SIZE);
+      const j = idx % GRID_SIZE;
       c.set(pal.floor).offsetHSL(0, 0, (hash01(i, j) - 0.5) * 0.08);
       this.floorMesh.setColorAt(idx, c);
     }
     this.floorMesh.instanceColor.needsUpdate = true;
     for (let idx = 0; idx < this.wallMesh.count; idx++) {
-      c.set(pal.wall).offsetHSL(0, 0, (hash01(idx, idx * 3) - 0.5) * 0.06);
+      // La paleta está en los vértices del módulo. La instancia solo modula
+      // un 3% el valor; no multiplica otra vez el color ni genera bloques negros.
+      c.setScalar(0.97 + hash01(idx, idx * 3) * 0.03);
       this.wallMesh.setColorAt(idx, c);
     }
     this.wallMesh.instanceColor.needsUpdate = true;

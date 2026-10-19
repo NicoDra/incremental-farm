@@ -65,8 +65,13 @@ function showSubject() {
     : selected ? selected.group.position.clone().add(new THREE.Vector3(0, 0.4, 0))
       : new THREE.Vector3(0, 0.2, 1.4);
   const offsets = { iso: [9, 10, -14], front: [0, 4, -16], back: [0, 4, 16], top: [0, 18, 0.01] };
+  const offset = new THREE.Vector3(...offsets[document.getElementById('view').value]);
+  // Las máquinas miran -Z; el granero mira +Z, hacia la parcela.
+  if (barn) offset.z *= -1;
+  stage.position.z = barn ? -9.5 : 1.5;
+  stage.scale.set(barn ? 0.5 : 1, barn ? 0.5 : 1, 1);
   view.controls.target.copy(target);
-  view.camera.position.copy(target).add(new THREE.Vector3(...offsets[document.getElementById('view').value]));
+  view.camera.position.copy(target).add(offset);
   view.camera.zoom = barn ? 2 : selected ? 5 : 1;
   view.camera.lookAt(target);
   view.camera.updateProjectionMatrix();

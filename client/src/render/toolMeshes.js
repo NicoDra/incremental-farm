@@ -176,14 +176,9 @@ function buildChannelGeo(type, baseY, age = 0, openWorld = null, rot8 = 0) {
     }
   }
 
-  if (type === 'curva') {
-    // M1.5-D4 punto 4: guía en L ORTOGONAL en la esquina interior
-    // (marco local: frente -z, entrada +x). Sin diagonales: la física guía
-    // por redirección (updateCurvas) y el camino pasa al sudoeste de la L.
-    // Brazos finos pegados a la esquina para no estrangular el canal.
-    v.add(0.14, 0.5, 0.4, 0.43, 0.26, -0.3, wood);
-    v.add(0.4, 0.5, 0.14, 0.3, 0.26, -0.43, wood);
-  } else if (type === 'embudo') {
+  // La curva conserva únicamente las paredes de su perímetro físico.
+  // Su antigua L interior era decorativa y confundía el espacio de paso.
+  if (type === 'embudo') {
     v.add(0.94, 0.5, 0.1, -0.36, 0.26, 0, wood, (-75 * Math.PI) / 180);
     v.add(0.94, 0.5, 0.1, 0.36, 0.26, 0, wood, (75 * Math.PI) / 180);
     v.add(0.5, 0.1, 0.12, 0, 0.06, 0.5, GOLD);

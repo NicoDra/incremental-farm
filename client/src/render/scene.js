@@ -31,6 +31,7 @@ export function createScene(canvas) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
   controls.enableDamping = true;
+  controls.screenSpacePanning = false;
   controls.dampingFactor = 0.08;
   controls.maxPolarAngle = Math.PI * 0.48;
   controls.minPolarAngle = 0.2;
