@@ -23,6 +23,23 @@ function hash01(i, j) {
   return (((i * 73856093) ^ (j * 19349663)) % 100) / 100;
 }
 
+// M1.5-E etapa 4: cielo con gradiente vertical por época (canvas 2x256,
+// barato y sin geometría). Arriba = color de cielo, abajo = horizonte (fog).
+function skyTexture(top, bottom) {
+  const c = document.createElement('canvas');
+  c.width = 2;
+  c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, top);
+  grad.addColorStop(1, bottom);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 2, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 // ── Glifos voxel 4×7 (col de bits, fila 0=arriba) ──────────────────────────
 const GLYPH = {
   E: ['1111','1000','1000','1110','1000','1000','1111'],
@@ -467,5 +484,9 @@ export class ParcelRenderer {
     }
     this.scene.background.set(pal.sky);
     if (this.scene.fog) this.scene.fog.color.set(mood.fog);
+    // M1.5-E etapa 4: cielo gradiente (arriba pal.sky, abajo el fog/horizonte)
+    if (this._skyTex) this._skyTex.dispose();
+    this._skyTex = skyTexture(pal.sky, mood.fog);
+    this.scene.background = this._skyTex;
   }
 }

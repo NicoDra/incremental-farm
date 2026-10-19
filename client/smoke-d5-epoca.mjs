@@ -100,4 +100,10 @@ ok(!/addDecal|_rebuildDecals/.test(parcelSrc), 'sin decals de suelo (quitaron)')
 ok(!/j <= 3/.test(parcelSrc), 'sin sendero pintado en el piso');
 ok(/isHemisphereLight/.test(parcelSrc) && /isDirectionalLight/.test(parcelSrc), 'mood aplica a hemi y sol');
 
+// ── Test 10: cielo con gradiente por época (etapa 4) ──────────────────────────
+ok(/function skyTexture/.test(parcelSrc), 'skyTexture existe');
+ok(/CanvasTexture/.test(parcelSrc), 'cielo via CanvasTexture (sin geometría)');
+ok(/createLinearGradient/.test(parcelSrc), 'gradiente vertical top→horizonte');
+ok(/this\._skyTex\.dispose\(\)/.test(parcelSrc), 'textura de cielo vieja se libera al cambiar era');
+
 console.log(`PASS smoke-d5-epoca (${pass} checks)`);
