@@ -1,6 +1,7 @@
 // M1.5-E smoke: transición de época + perfil visual por época.
 // Headless (sin Three.js): verifica contratos de datos (AGE_PALETTES, LEVELS)
 // y que la transición repinta lo visual SIN mutar el GameState.
+import { readFileSync } from 'node:fs';
 import { AGE_PALETTES, LEVELS, AGES } from 'chanchos-shared';
 
 let pass = 0;
@@ -80,5 +81,28 @@ ok(AGES.length === AGE_PALETTES.length, 'AGES y AGE_PALETTES misma cantidad de �
 const DUR = { full: 3000, short: 900 };
 ok(DUR.full > DUR.short, 'transición completa dura más que la corta de debug');
 ok(DUR.short > 0 && DUR.full > 0, 'duraciones positivas');
+
+// ── Test 8: suelo anti-mono + mood de luces por época (source scan de parcel.js)
+const parcelSrc = readFileSync('./src/render/parcel.js', 'utf8');
+const moodRows = parcelSrc.match(/\{ hemiSky:[^}]+\}/g) || [];
+ok(moodRows.length === 4, 'MOOD: 4 épocas de luz');
+for (const [n, m] of moodRows.entries()) {
+  const hex = m.match(/#[0-9a-fA-F]{6}/g) || [];
+  ok(hex.length >= 4, `MOOD[${n}] con hemiSky/hemiGround/sun/fog`);
+}
+const palRows = parcelSrc.match(/\{ floor: '#[0-9a-fA-F]{6}'[^}]+\}/g) || [];
+ok(palRows.length === 4, 'PALETTES: 4 épocas con suelo');
+for (const [n, p] of palRows.entries()) {
+  const f = p.match(/floor: '(#[0-9a-fA-F]{6})'/)?.[1];
+  const f2 = p.match(/floor2: '(#[0-9a-fA-F]{6})'/)?.[1];
+  const patch = p.match(/patch: '(#[0-9a-fA-F]{6})'/)?.[1];
+  ok(Boolean(f && f2 && patch), `PALETTES[${n}]: floor + floor2 + patch`);
+  ok(f !== f2, `PALETTES[${n}]: floor2 distinto de floor (anti-mono)`);
+  ok(f !== patch && f2 !== patch, `PALETTES[${n}]: patch distinto`);
+}
+ok(/_rebuildDecals/.test(parcelSrc), 'decals de suelo por época');
+ok(/addDecal/.test(parcelSrc), 'helper de decals por época');
+ok(/j <= 3/.test(parcelSrc), 'sendero al portal marcado (columna 7-8, j<=3)');
+ok(/isHemisphereLight/.test(parcelSrc) && /isDirectionalLight/.test(parcelSrc), 'mood aplica a hemi y sol');
 
 console.log(`PASS smoke-d5-epoca (${pass} checks)`);
