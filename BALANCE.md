@@ -60,6 +60,12 @@
 - Demo completa de ~35-40 min: Barro 3-4 min, Madera 6-8, Piedra 8-10, Fábrica 10+ con sumideros de dinero.
 - Hoy las edades se pasan demasiado rápido: subir de edad no debe resolverse solo con dinero (ver requisitos de entrega por producto).
 
+## Registro de partida real (octubre 2026)
+- **Pendiente de equilibrar: Barro→Madera pide 30 choclos, pero la partida reportada llegó a 198 entregados antes de poder avanzar** ("Choclo Premium: 198/30 ✓"). El desfase observado es de 6,6 veces el requisito. El problema es la relación entre requisitos y progresión, no que el contador muestre un exceso.
+- Hipótesis a medir: reunir los $800 y pagar el circuito inicial prolonga la edad después de cumplir la meta de productos. Registrar tiempo, entregas, saldo, gasto en construcciones y mejoras al cumplir los 30 choclos y al poder comprar la edad. No atribuir toda la diferencia a una causa sin esa medición.
+- Recalibrar juntos costo de promoción, meta de productos e ingresos para que ambos requisitos se alcancen en momentos próximos, manteniendo Barro en 3–4 minutos. No adoptar 198 ni un nuevo umbral arbitrario a partir de una sola partida. Revisar el mismo desfase en Madera→Piedra y Piedra→Fábrica.
+- El tope visual N/N del HUD es solo presentación: **no resuelve el balance**. El total real se conserva en `deliveredKinds` y está disponible en el tooltip de cada meta. La calibración económica sigue pendiente.
+
 ## Registro J1 (primera pasada de balance, valores de arranque)
 - `START_MONEY = 75`, `LIQUIDATION_RATE = 0.10`, `AUTO_LIQUIDATE_RATE = 0`, `AUTO_LIQUIDATE_SECONDS = 90`, `BULK_LIQUIDATION_COOLDOWN_MS = 30000`, `COMBO_LIQUIDATION_PENALTY = 0.25`.
 - Costes de edad: Madera 800, Piedra 5500, Fábrica 28000.

@@ -333,8 +333,7 @@ export class SimWorld {
       if (e.type === 'curva') {
         // M1.5-D4 punto 4: SIN deflector diagonal. La curva guía por
         // redirección de velocidad (updateCurvas) y sus paredes son solo
-        // ortogonales (losa + perímetro). La esquina interior lleva una guía
-        // visual en L sin colisionador (ver toolMeshes).
+        // ortogonales (losa + perímetro). El modelo muestra ese mismo perímetro.
       } else if (e.type === 'union') {
         const yaw = yawDeg(e.rot8);
         const rad = (yaw * Math.PI) / 180;

@@ -152,11 +152,19 @@ const root = dirname(fileURLToPath(import.meta.url));
 // ---- 7) sprite: tiene marco de salida dorado y líneas laterales marcadas ----
 {
   const meshes = readFileSync(join(root, 'src', 'render', 'toolMeshes.js'), 'utf8');
-  const branch = meshes.slice(
-    meshes.indexOf("type === 'jamonera_industrial'"),
-    meshes.indexOf("type === 'silo'"),
-  );
-  ok(/GOLD/.test(branch), 'F2U: sprite con boca de salida dorada');
+  const { buildProducerGeo } = await import('./src/render/machineModels.js');
+  const { Color } = await import('three');
+  const geometry = buildProducerGeo('jamonera_industrial', 3);
+  const positions = geometry.attributes.position;
+  const colors = geometry.attributes.color;
+  const gold = new Color('#f2c94c');
+  let goldenOutlet = false;
+  for (let i = 0; i < positions.count; i++) {
+    if (positions.getZ(i) < -0.4 && Math.abs(colors.getX(i) - gold.r) < 0.001 &&
+        Math.abs(colors.getY(i) - gold.g) < 0.001) goldenOutlet = true;
+  }
+  ok(goldenOutlet, 'F2U: geometría con marco de salida dorado delante de la carcasa');
+  geometry.dispose();
   ok(/inputSides/.test(meshes), 'F2U: flechas según inputSides de cada receta');
 }
 

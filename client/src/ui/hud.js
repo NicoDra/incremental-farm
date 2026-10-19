@@ -2,7 +2,7 @@
 // (menú agrupado por categoría, reemplaza la hotbar) + selección.
 // Lee todo de GameState (no duplica reglas): canBuyTool, toolPrice, upgrade*,
 // nextAgePreview, refundRate, allowedRect.
-import { TOOLS, TOOL_ORDER, TOOL_CATEGORIES, UPGRADE_LINES, PRODUCTS, AGE_GOALS, COMBO_MAX_BY_AGE, formatMoney } from 'chanchos-shared';
+import { TOOLS, TOOL_ORDER, TOOL_CATEGORIES, UPGRADE_LINES, PRODUCTS, AGE_GOALS, COMBO_MAX_BY_AGE, LEVELS, formatMoney } from 'chanchos-shared';
 
 const ICONS = {
   recta: '┃',
@@ -69,6 +69,7 @@ export class Hud {
     this.buildToolRemoveBtn = null;
     this.buildHeightButtons();
     this.buildBuildCards();
+    this.buildEraOverlay();
     this.el.btnSellGround.addEventListener('click', () => this.cb.onSellGround?.());
     this.el.btnDirs.addEventListener('click', () => this.cb.onToggleDirs?.());
     this.el.btnHelp.addEventListener('click', () => this.showGuide());
@@ -118,6 +119,74 @@ export class Hud {
       this.openDrawer('build');
     }
     this.refresh();
+  }
+
+  // M1.5-E: overlay de transición de época. No bloquea los controles (solo la
+  // tarjeta captura clics); se cierra solo o al hacer clic / Esc.
+  buildEraOverlay() {
+    const mk = (cls, tag) => {
+      const n = document.createElement(tag || 'div');
+      n.className = cls;
+      return n;
+    };
+    const el = document.createElement('div');
+    el.id = 'era-transition';
+    el.className = 'hidden';
+    const card = mk('era-card');
+    const tagEl = mk('era-tag', 'span');
+    const title = mk('era-title', 'h2');
+    const slogan = mk('era-slogan', 'p');
+    const hint = mk('era-hint', 'span');
+    hint.textContent = 'clic o Esc para continuar';
+    card.appendChild(tagEl);
+    card.appendChild(title);
+    card.appendChild(slogan);
+    card.appendChild(hint);
+    el.appendChild(card);
+    (byId('hud') || document.body).appendChild(el);
+    this.eraEl = el;
+    this.eraCard = card;
+    this.eraTag = tagEl;
+    this.eraTitle = title;
+    this.eraSlogan = slogan;
+    this._eraTimer = null;
+    this._eraHideTimer = null;
+    this._eraEsc = (e) => {
+      if (e.key === 'Escape' && !this.eraEl.classList.contains('hidden')) {
+        this.hideEraTransition();
+      }
+    };
+    card.addEventListener('click', () => this.hideEraTransition());
+  }
+
+  showEraTransition(level, opts = {}) {
+    if (!this.eraEl || !this.eraTitle) return;
+    const lvl = Math.max(0, Math.min(Number(level) || 0, LEVELS.length - 1));
+    const L = LEVELS[lvl] || LEVELS[0];
+    this.eraTag.textContent = `ÉPOCA ${lvl}`;
+    this.eraTitle.textContent = L.name;
+    this.eraSlogan.textContent = L.slogan || '';
+    clearTimeout(this._eraTimer);
+    clearTimeout(this._eraHideTimer);
+    this.eraEl.classList.remove('hidden', 'out');
+    void this.eraEl.offsetWidth; // reinicia la animación de entrada
+    this.eraEl.classList.add('show');
+    const dur = opts.short ? 900 : 3000;
+    this._eraTimer = setTimeout(() => this.hideEraTransition(), dur);
+    document.addEventListener?.('keydown', this._eraEsc);
+  }
+
+  hideEraTransition() {
+    if (!this.eraEl || this.eraEl.classList.contains('hidden')) return;
+    clearTimeout(this._eraTimer);
+    clearTimeout(this._eraHideTimer);
+    this.eraEl.classList.remove('show');
+    this.eraEl.classList.add('out');
+    document.removeEventListener?.('keydown', this._eraEsc);
+    this._eraHideTimer = setTimeout(() => {
+      this.eraEl.classList.add('hidden');
+      this.eraEl.classList.remove('out');
+    }, 450);
   }
 
   // ---- pestaña Construir (menú agrupado; reemplaza la hotbar) ----
@@ -395,11 +464,14 @@ export class Hud {
       const list = document.createElement('div');
       list.className = 'sel-sub';
       for (const g of goal) {
-        const have = s.deliveredKinds?.[g.kind] || 0;
+        // El progreso visual tiene tope; el total real sigue disponible para
+        // calibrar el desfase entre requisitos económicos y de productos.
+        const have = Math.min(s.deliveredKinds?.[g.kind] || 0, g.count);
         const done = have >= g.count;
         const cell = document.createElement('div');
         cell.className = 'sel-sub';
         cell.textContent = `${PRODUCTS[g.kind].name}: ${have}/${g.count}${done ? ' ✓' : ''}`;
+        cell.title = `Entregas reales: ${s.deliveredKinds?.[g.kind] || 0}. Requisito: ${g.count}.`;
         const bar = document.createElement('div');
         bar.className = 'sel-meter';
         const fill = document.createElement('div');
