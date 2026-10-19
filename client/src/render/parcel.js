@@ -69,15 +69,29 @@ function addSignLetters(v, text, xLeft, yBot, signW, signH, zFront) {
 }
 
 // ── Granero de entrega ────────────────────────────────────────────────────────
+// M1.5-E: perfil visual por época (Barro/Madera/Piedra/Fábrica). El granero se
+// repinta al subir de edad; el estado de las puertas se rearma cerrado.
+const GATE_STYLE = [
+  { wall: '#a0622a', wallDark: '#7a4520', roof: '#5a3010', ridge: '#3d2208', door: '#2e1a08', doorBar: '#7a4520', pattern: null, joint: null, band: null }, // Barro
+  { wall: '#b0824c', wallDark: '#8a5f36', roof: '#a8433a', ridge: '#7a2f28', door: '#3a2410', doorBar: '#8a5f36', pattern: 'planks', joint: '#6b4a24', band: '#7fae4a' }, // Madera: techo rojo + tablones + banda verde
+  { wall: '#8b8b93', wallDark: '#6c6c74', roof: '#4a5a68', ridge: '#35424e', door: '#5a3a1e', doorBar: '#7a5327', pattern: 'stone', joint: '#6c6c74', band: null }, // Piedra: pizarra azul + hiladas + puerta de madera
+  { wall: '#5d6673', wallDark: '#3a3f47', roof: '#c9a13b', ridge: '#8a8f98', door: '#2b2f36', doorBar: '#c9a13b', pattern: 'panels', joint: '#3a3f47', band: null }, // Fábrica: chapa acanalada + techo dorado
+];
+
+function gateStyle(age) {
+  return GATE_STYLE[Math.max(0, Math.min(age || 0, GATE_STYLE.length - 1))];
+}
+
 // Devuelve { body, doorL, doorR } — tres meshes separados.
 // doorL/doorR rotan sobre eje Y; su pivote está en la bisagra (borde interior).
-function buildDepotGate() {
-  // Paleta Barro
-  const WOOD_L  = '#a0622a';
-  const WOOD_D  = '#7a4520';
-  const PLANK_H = '#5a3010';
-  const PLANK_R = '#3d2208';
-  const DOOR_C  = '#2e1a08';
+function buildDepotGate(age = 0) {
+  const S = gateStyle(age);
+  const WOOD_L  = S.wall;
+  const WOOD_D  = S.wallDark;
+  const PLANK_H = S.roof;
+  const PLANK_R = S.ridge;
+  const DOOR_C  = S.door;
+  const DOOR_BAR = S.doorBar;
   const TRIM    = '#f2c94c';
   const SIGN_BG = '#fdf3d0';
   const METAL   = '#c8a832';
@@ -107,6 +121,68 @@ function buildDepotGate() {
   vb.add(JT, DH, 0.2, -(DW - JT / 2), DH / 2, fz + 0.02, TRIM);
   vb.add(JT, DH, 0.2,  (DW - JT / 2), DH / 2, fz + 0.02, TRIM);
   vb.add(DW * 2, JT, 0.2, 0, DH - JT / 2, fz + 0.02, TRIM);
+  // ── micro-patrón por época (solo estético) ─────────────────────────────────
+  // Marcas finas flotando +0.02 sobre la cara visible: nunca coplanares con el
+  // muro (evita z-fighting) y sin colisión. Barato: pocas cajas voxel.
+  const PZ   = 0.02;                   // grosor de cada marca
+  const zF   = fz + 0.10;              // cara sur (la que ve el jugador)
+  const segs = [[-W, -DW], [DW, W]];   // paños frontales libres de marco/puerta
+  if (S.pattern === 'planks') {
+    // tablones: juntas verticales en frente y costados
+    for (const [x0, x1] of segs) {
+      for (let x = x0 + 0.3; x < x1 - 0.05; x += 0.34) {
+        vb.add(0.03, WH - 0.06, PZ, x, WH / 2, zF, S.joint);
+      }
+    }
+    for (const sx of [-1, 1]) {
+      for (let z = bz + 0.32; z < fz - 0.1; z += 0.4) {
+        vb.add(PZ, WH - 0.06, 0.03, sx * (W + 0.10), WH / 2, z, S.joint);
+      }
+    }
+  } else if (S.pattern === 'stone') {
+    // hiladas horizontales + juntas verticales escalonadas (frente y costados)
+    for (const [x0, x1] of segs) {
+      const cx = (x0 + x1) / 2;
+      const w = x1 - x0;
+      for (const y of [0.42, 0.84]) {
+        vb.add(w - 0.06, 0.035, PZ, cx, y, zF, S.joint);
+      }
+      const rows = [[0.21, 0.42], [0.63, 0.42], [1.02, 0.36]];
+      rows.forEach(([yc, hh], ri) => {
+        const off = ri % 2 === 0 ? 0.3 : 0.64;
+        for (let x = x0 + off; x < x1 - 0.06; x += 0.68) {
+          vb.add(0.035, hh, PZ, x, yc, zF, S.joint);
+        }
+      });
+    }
+    for (const sx of [-1, 1]) {
+      for (const y of [0.42, 0.84]) {
+        vb.add(PZ, 0.035, DEPTH - 0.12, sx * (W + 0.10), y, midZ, S.joint);
+      }
+    }
+  } else if (S.pattern === 'panels') {
+    // chapa acanalada: franjas horizontales alternadas
+    for (const [x0, x1] of segs) {
+      const cx = (x0 + x1) / 2;
+      const w = x1 - x0;
+      let i = 0;
+      for (let y = 0.24; y < WH - 0.08; y += 0.3) {
+        if (i % 2 === 0) vb.add(w - 0.05, 0.13, PZ, cx, y, zF, S.joint);
+        i++;
+      }
+    }
+    for (const sx of [-1, 1]) {
+      let i = 0;
+      for (let y = 0.24; y < WH - 0.08; y += 0.3) {
+        if (i % 2 === 0) vb.add(PZ, 0.13, DEPTH - 0.12, sx * (W + 0.10), y, midZ, S.joint);
+        i++;
+      }
+    }
+  }
+  if (S.band) {
+    // banda de acento bajo el alero del frente (firma de la época)
+    vb.add(W * 2 - 0.06, 0.07, 0.07, 0, WH + 0.05, fz + 0.11, S.band);
+  }
   // tejado
   const roofY  = WH + 0.08;
   const ridgeH = 0.55;
@@ -143,7 +219,7 @@ function buildDepotGate() {
     const vd = voxelBuilder();
     // Panel centrado en x=0 localmente; la bisagra queda en x = -sx*leafW/2
     vd.add(leafW, DH - JT, 0.1,  sx * leafW / 2, DH / 2 - JT / 2, 0, DOOR_C);
-    vd.add(leafW, 0.08,    0.12, sx * leafW / 2, DH * 0.52,       0, WOOD_D);
+    vd.add(leafW, 0.08,    0.12, sx * leafW / 2, DH * 0.52,       0, DOOR_BAR);
     for (const by of [0.25, 0.85]) {
       // bisagra en el borde interior (x = 0 lado bisagra)
       vd.add(0.1, 0.1, 0.14, sx * 0.1, DH * by, 0, METAL);
@@ -218,12 +294,34 @@ export class ParcelRenderer {
     // Estado de animación de puertas
     this._doorAnim  = null;
     this._doorAngle = 0; // ángulo actual (rad), 0=cerrado, MAX_ANGLE=abierto
+    this._gateAge   = 0; // época con la que está pintado el granero
 
     // M1.5-C: bloqueo visual fuera de la zona jugable (valla de postes + velo).
     this.zoneGroup = new THREE.Group();
     scene.add(this.zoneGroup);
 
     this.applyLevel(0);
+  }
+
+  // M1.5-E: repinta el granero con la paleta de la nueva época. Reemplaza los
+  // tres meshes y libera las geometrías viejas; rearma las puertas cerradas.
+  _rebuildGate(age) {
+    for (const m of [this._gateBody, this._doorL, this._doorR]) {
+      if (!m) continue;
+      this.scene.remove(m);
+      m.traverse((o) => o.geometry?.dispose?.());
+    }
+    const gate = buildDepotGate(age);
+    this._gateBody = gate.body;
+    this._doorL    = gate.doorL;
+    this._doorR    = gate.doorR;
+    this.scene.add(this._gateBody);
+    this.scene.add(this._doorL);
+    this.scene.add(this._doorR);
+    this._doorAnim  = null;
+    this._doorAngle = 0;
+    this._applyDoorAngle(0);
+    this._gateAge = age;
   }
 
   // Abre las puertas brevemente (llamado desde onDeliver)
@@ -331,6 +429,7 @@ export class ParcelRenderer {
 
   applyLevel(level) {
     const pal = PALETTES[Math.min(level, PALETTES.length - 1)];
+    if (this._gateAge !== level) this._rebuildGate(level);
     const c = new THREE.Color();
     for (let idx = 0; idx < this.floorMesh.count; idx++) {
       const i = idx % GRID_SIZE;

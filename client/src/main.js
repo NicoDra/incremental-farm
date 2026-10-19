@@ -6,7 +6,6 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import {
   HALF_GRID,
   GRID_SIZE,
-  LEVELS,
   TOOLS,
   PRODUCTS,
   DIRS8,
@@ -235,11 +234,11 @@ async function boot() {
     if (!state.buyLevel()) return;
     parcel.applyLevel(state.level);
     parcel.setAllowedRect(state.allowedRect());
-    toolsR.setAge(state.level);
+    toolsR.refreshAges(state.level);
     toolsR.setFanTier(state.fanTier());
     sim.setFanTier(state.fanTier());
     sim.setModifiers(state.simModifiers());
-    hud.toast(LEVELS[state.level].slogan);
+    hud.showEraTransition(state.level);
     if (before === 0 && state.level >= 1) {
       hud.toast('El reembolso por demoler baja al 75% desde Madera.');
     }
@@ -1061,11 +1060,12 @@ async function boot() {
     state.level = a;
     parcel.applyLevel(state.level);
     parcel.setAllowedRect(state.allowedRect());
-    toolsR.setAge(state.level);
+    toolsR.refreshAges(state.level);
     toolsR.setFanTier(state.fanTier());
     sim.setFanTier(state.fanTier());
     sim.setModifiers(state.simModifiers());
     state.emit();
+    hud.showEraTransition(a, { short: true });
     updateGhost();
     updateConfig();
   }
@@ -1234,7 +1234,7 @@ async function boot() {
     selectedKey = null;
     toolsR.setSelectedKey(null);
     toolsR.clearSelection();
-    toolsR.setAge(0);
+    toolsR.refreshAges(0);
     toolsR.setFanTier(state.fanTier());
     sim.setFanTier(state.fanTier());
     sim.setModifiers(state.simModifiers());

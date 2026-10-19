@@ -469,6 +469,49 @@ export class ToolManager {
     return this.fanGeos[Math.max(0, Math.min(tier || 0, 3))];
   }
 
+  // M1.5-E: al cambiar de época repinta TODAS las piezas ya colocadas con la
+  // paleta nueva (AGE_PALETTES). Reemplaza solo la geometría del cuerpo; las
+  // flechas, íconos y animaciones siguen colgando del mismo grupo.
+  refreshAges(age) {
+    const a = Math.max(0, Math.min(age || 0, 3));
+    this.currentAge = a;
+    this.fanGeos = [0, 1, 2, 3].map((t) => buildFanGeo(t, a));
+    this.fanGeo = this.fanGeos[Math.max(0, Math.min(this.currentFanTier, 3))];
+    for (const [key, entry] of this.entries) {
+      entry.age = a;
+      this._rebuildEntryBody(key, entry);
+    }
+  }
+
+  _rebuildEntryBody(key, entry) {
+    const [i, j, h] = key.split(',').map(Number);
+    const baseY = h * LEVEL_H;
+    let geo;
+    if (isChannelType(entry.type)) {
+      const opens = openingsFlags(entry.type, entry.group.userData.rot8, { i, j }, h, this.entries);
+      geo = buildChannelGeo(entry.type, baseY, entry.age, opens, entry.group.userData.rot8);
+    } else if (entry.type === 'puente') {
+      geo = buildBridgeGeo(entry.age);
+    } else if (entry.type === 'rampa') {
+      geo = buildRampGeo(baseY, entry.age);
+    } else if (entry.type === 'fan') {
+      geo = this.fanGeoFor(entry.fanTier);
+    } else {
+      geo = buildProducerGeo(entry.type, entry.age);
+    }
+    const old = entry.group.userData.bodyMesh;
+    const parent = old?.parent || entry.group;
+    const mesh = new THREE.Mesh(geo, this.bodyMat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    if (old) {
+      parent.remove(old);
+      old.geometry?.dispose?.();
+    }
+    entry.group.userData.bodyMesh = mesh;
+  }
+
   // M1.5-C: visibilidad de direcciones (reutiliza las flechas del preview/selección).
   setShowAllDirs(v) {
     this.showAllDirs = Boolean(v);
@@ -597,6 +640,7 @@ export class ToolManager {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);
+      group.userData.bodyMesh = mesh;
       this.buildArrows(group, type);
     } else if (type === 'rampa') {
       const tilted = new THREE.Group();
@@ -607,11 +651,13 @@ export class ToolManager {
       mesh.receiveShadow = true;
       tilted.add(mesh);
       group.add(tilted);
+      group.userData.bodyMesh = mesh;
       this.buildArrows(group, type);
     } else if (type === 'fan') {
       const mesh = new THREE.Mesh(this.fanGeoFor(fanTier), this.bodyMat);
       mesh.castShadow = true;
       group.add(mesh);
+      group.userData.bodyMesh = mesh;
       const supGeo = fanSupportsGeo(baseY);
       if (supGeo) group.add(new THREE.Mesh(supGeo, this.bodyMat));
       const head = new THREE.Group();
@@ -638,6 +684,7 @@ export class ToolManager {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       group.add(mesh);
+      group.userData.bodyMesh = mesh;
       if (type === 'silo') {
         // M1.5-F4: soportes en N1/N2 (igual que el ventilador elevado).
         const supGeo = fanSupportsGeo(baseY);
