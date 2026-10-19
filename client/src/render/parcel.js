@@ -4,15 +4,14 @@ import { GRID_SIZE, HALF_GRID, GAP_CELLS } from 'chanchos-shared';
 import { voxelBuilder, voxelMaterial } from './voxel.js';
 
 export const PALETTES = [
-  { floor: '#7a5236', floor2: '#84593a', patch: '#8a4a30', wall: '#8d6244', sky: '#bfd9e8' }, // barro
-  { floor: '#a8763e', floor2: '#b17d42', patch: '#7f9a4a', wall: '#8a5a2b', sky: '#c9dbe2' }, // madera
-  { floor: '#9a9aa2', floor2: '#a2a3ab', patch: '#8a8f7a', wall: '#7d7d86', sky: '#c2cdd6' }, // piedra
-  { floor: '#565e6e', floor2: '#5e6676', patch: '#4a5568', wall: '#3e4552', sky: '#9fb2c4' }, // fábrica
+  { floor: '#7a5236', wall: '#8d6244', sky: '#bfd9e8' }, // barro
+  { floor: '#a8763e', wall: '#8a5a2b', sky: '#c9dbe2' }, // madera
+  { floor: '#9a9aa2', wall: '#7d7d86', sky: '#c2cdd6' }, // piedra
+  { floor: '#565e6e', wall: '#3e4552', sky: '#9fb2c4' }, // fábrica
 ];
 
-// M1.5-E mood: identidad de luz por época. El suelo a 2 tonos rompe el mono;
-// la luz pintada por era hace leer la transición sin tocar gameplay.
-const GOLD = '#f2c94c'; // mismo oro de bocas/flechas: sendero al portal = "entregá acá"
+// M1.5-E mood: identidad de luz por época. El color lo aportan luces, granero
+// y remates; el piso queda limpio (un tono + jitter sutil de luminosidad).
 const MOOD = [
   { hemiSky: '#ffdfae', hemiGround: '#8a5f36', sun: '#ffd9a0', sunI: 1.45, fog: '#a9c6da' }, // Barro: tarde dorada
   { hemiSky: '#eaf6ff', hemiGround: '#6f8f4a', sun: '#fff2d8', sunI: 1.7, fog: '#b0cede' }, // Madera: mañana clara
@@ -22,46 +21,6 @@ const MOOD = [
 
 function hash01(i, j) {
   return (((i * 73856093) ^ (j * 19349663)) % 100) / 100;
-}
-
-// M1.5-E decals de suelo por época: cajas voxel mínimas en UN mesh fusionado.
-// Determinísticos (hash01), sin colisión, ~13% de las celdas.
-function addDecal(v, era, x, z, r) {
-  if (era === 0) {
-    // Barro: romas (piedritas) y ramitas
-    if (r < 0.5) {
-      v.add(0.16, 0.05, 0.12, x, 0.025, z, '#9a8a72', r * Math.PI);
-      v.add(0.1, 0.04, 0.08, x + 0.18, 0.02, z - 0.1, '#8a7a62');
-    } else {
-      v.add(0.3, 0.03, 0.05, x, 0.015, z, '#6b4a24', r * Math.PI * 2);
-    }
-  } else if (era === 1) {
-    // Madera: pastito y tronquitos
-    if (r < 0.7) {
-      for (let b = 0; b < 3; b++) {
-        v.add(0.03, 0.09, 0.03, x + (b - 1) * 0.07, 0.045, z + (b % 2) * 0.05,
-          b === 2 ? '#7fae4a' : '#5c8a2a');
-      }
-    } else {
-      v.add(0.26, 0.04, 0.06, x, 0.02, z, '#7a5327', r * Math.PI);
-    }
-  } else if (era === 2) {
-    // Piedra: grietas y musgo
-    if (r < 0.5) {
-      v.add(0.4, 0.016, 0.05, x, 0.01, z, '#5a5a62', r * Math.PI);
-    } else {
-      v.add(0.24, 0.03, 0.2, x, 0.015, z, '#5f7d3a');
-      v.add(0.14, 0.025, 0.12, x + 0.1, 0.012, z + 0.08, '#6a8a42');
-    }
-  } else {
-    // Fábrica: franjas pintadas y rejillas
-    if (r < 0.6) {
-      v.add(0.5, 0.014, 0.09, x, 0.007, z, GOLD, r < 0.3 ? 0 : Math.PI / 2);
-    } else {
-      v.add(0.3, 0.02, 0.3, x, 0.01, z, '#3e4552');
-      v.add(0.24, 0.024, 0.05, x, 0.012, z, '#565e6e');
-    }
-  }
 }
 
 // ── Glifos voxel 4×7 (col de bits, fila 0=arriba) ──────────────────────────
@@ -350,9 +309,6 @@ export class ParcelRenderer {
     this.zoneGroup = new THREE.Group();
     scene.add(this.zoneGroup);
 
-    // M1.5-E: decals de suelo por época (1 mesh fusionado)
-    this.decalMesh = null;
-
     this.applyLevel(0);
   }
 
@@ -480,50 +436,14 @@ export class ParcelRenderer {
     if (rect.i1 < 15) mkVeil((x1 + H) / 2, (z0 + z1) / 2, H - x1, z1 - z0); // este
   }
 
-  // M1.5-E: decals de suelo (romas/pasto/grietas/franjas) según la época.
-  // Determinístico con hash01: misma parcela = mismos decals siempre.
-  _rebuildDecals(level) {
-    if (this.decalMesh) {
-      this.scene.remove(this.decalMesh);
-      this.decalMesh.geometry.dispose();
-      this.decalMesh = null;
-    }
-    const v = voxelBuilder();
-    for (let i = 0; i < GRID_SIZE; i++) {
-      for (let j = 0; j < GRID_SIZE; j++) {
-        if ((i === 7 || i === 8) && j <= 3) continue; // sendero al portal queda limpio
-        if (hash01(i * 11 + 3, j * 17 + 5) <= 0.87) continue;
-        const x = i - HALF_GRID + 0.5;
-        const z = j - HALF_GRID + 0.5;
-        addDecal(v, level, x, z, hash01(i * 7 + 1, j * 13 + 2));
-      }
-    }
-    const geo = v.build();
-    if (!geo) return;
-    const m = new THREE.Mesh(geo, voxelMaterial());
-    m.receiveShadow = true;
-    this.scene.add(m);
-    this.decalMesh = m;
-  }
-
   applyLevel(level) {
     const pal = PALETTES[Math.min(level, PALETTES.length - 1)];
     if (this._gateAge !== level) this._rebuildGate(level);
     const c = new THREE.Color();
-    // M1.5-E suelo anti-mono: checker sutil de 2 tonos + parches de matiz
-    // (~12%) + sendero dorado centro→portal (baldosas marcadas, color only).
-    const gold = new THREE.Color(GOLD);
     for (let idx = 0; idx < this.floorMesh.count; idx++) {
       const i = idx % GRID_SIZE;
       const j = Math.floor(idx / GRID_SIZE);
-      let base = ((i + j) % 2 === 0) ? pal.floor : pal.floor2;
-      if (hash01(i * 5 + 1, j * 3 + 2) > 0.88) base = pal.patch;
-      if ((i === 7 || i === 8) && j <= 3) {
-        c.set(base).lerp(gold, 0.35);
-      } else {
-        c.set(base);
-      }
-      c.offsetHSL(0, 0, (hash01(i, j) - 0.5) * 0.08);
+      c.set(pal.floor).offsetHSL(0, 0, (hash01(i, j) - 0.5) * 0.08);
       this.floorMesh.setColorAt(idx, c);
     }
     this.floorMesh.instanceColor.needsUpdate = true;
@@ -532,7 +452,6 @@ export class ParcelRenderer {
       this.wallMesh.setColorAt(idx, c);
     }
     this.wallMesh.instanceColor.needsUpdate = true;
-    this._rebuildDecals(level);
     // M1.5-E mood: luz por época (hemi + sol) y fog distinto del cielo
     // (profundidad de horizonte). Sin tocar la física ni el gameplay.
     const mood = MOOD[Math.min(level, MOOD.length - 1)];
