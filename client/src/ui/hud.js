@@ -464,7 +464,9 @@ export class Hud {
       const list = document.createElement('div');
       list.className = 'sel-sub';
       for (const g of goal) {
-        const have = s.deliveredKinds?.[g.kind] || 0;
+        // M1.5-J1 fix: el contador se clava en la meta una vez cumplida.
+        // Antes seguía sumando (p. ej. 198/30 ✓), que leía como bug de ritmo.
+        const have = Math.min(s.deliveredKinds?.[g.kind] || 0, g.count);
         const done = have >= g.count;
         const cell = document.createElement('div');
         cell.className = 'sel-sub';

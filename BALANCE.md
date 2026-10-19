@@ -60,6 +60,10 @@
 - Demo completa de ~35-40 min: Barro 3-4 min, Madera 6-8, Piedra 8-10, Fábrica 10+ con sumideros de dinero.
 - Hoy las edades se pasan demasiado rápido: subir de edad no debe resolverse solo con dinero (ver requisitos de entrega por producto).
 
+## Registro de partida real (octubre 2026)
+- **Barro→Madera: meta de 30 choclos, subida real con 198 entregados** (widget llegó a marcar "Choclo Premium: 198/30 ✓"). La meta de producto no es el cuello de botella: el tiempo de armar el circuito y juntar los $800 domina. Recalibrar en la pasada de balance: subir la meta (p. ej. 60-90 choclos) o bajar el costo, de modo que producto y dinero aten cerca del mismo momento. Verificar el mismo desfase en Madera→Piedra y Piedra→Fábrica.
+- Fix ya aplicado: el widget de meta deja de contar pasado el requisito (se clava en N/N ✓, `hud.js`), para que el exceso no lea como bug.
+
 ## Registro J1 (primera pasada de balance, valores de arranque)
 - `START_MONEY = 75`, `LIQUIDATION_RATE = 0.10`, `AUTO_LIQUIDATE_RATE = 0`, `AUTO_LIQUIDATE_SECONDS = 90`, `BULK_LIQUIDATION_COOLDOWN_MS = 30000`, `COMBO_LIQUIDATION_PENALTY = 0.25`.
 - Costes de edad: Madera 800, Piedra 5500, Fábrica 28000.
