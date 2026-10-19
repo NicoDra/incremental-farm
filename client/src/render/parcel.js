@@ -19,6 +19,11 @@ const MOOD = [
   { hemiSky: '#c9d2e2', hemiGround: '#4a5060', sun: '#ffe9b8', sunI: 1.55, fog: '#8fa4bc' }, // Fábrica: industrial cálido
 ];
 
+// M1.5-E etapa 3: acento del remate de muros por época. Franja superior +
+// pilares en esquinas: silueta legible desde la cámara isométrica y un matiz
+// firma por era sin tocar el piso.
+const WALL_TRIM = ['#4a9e94', '#7fae4a', '#4a5a68', '#f2c94c']; // Barro/Madera/Piedra/Fábrica
+
 function hash01(i, j) {
   return (((i * 73856093) ^ (j * 19349663)) % 100) / 100;
 }
@@ -309,7 +314,42 @@ export class ParcelRenderer {
     this.zoneGroup = new THREE.Group();
     scene.add(this.zoneGroup);
 
+    // M1.5-E etapa 3: remate de muros con acento de época (1 mesh fusionado)
+    this.trimMesh = null;
+
     this.applyLevel(0);
+  }
+
+  // M1.5-E etapa 3: franja sobre el borde superior de los muros + pilares en
+  // las 4 esquinas, con el acento de la época. Se rehace por era (color only).
+  _rebuildWallTrim(level) {
+    if (this.trimMesh) {
+      this.scene.remove(this.trimMesh);
+      this.trimMesh.geometry.dispose();
+      this.trimMesh = null;
+    }
+    const accent = WALL_TRIM[Math.max(0, Math.min(level || 0, WALL_TRIM.length - 1))];
+    const T = 0.14;              // alto de la franja
+    const y = 1.2 + 0.01 + T / 2; // apoyada sobre el muro (tope en y=1.2)
+    const v = voxelBuilder();
+    // franjas completas al sur/oeste/este; al norte en 2 tramos (brecha del granero)
+    v.add(16, T, 1.02, 0, y, 7.5, accent);
+    v.add(1.02, T, 16, -7.5, y, 0, accent);
+    v.add(1.02, T, 16, 7.5, y, 0, accent);
+    v.add(6, T, 1.02, -5, y, -7.5, accent);
+    v.add(6, T, 1.02, 5, y, -7.5, accent);
+    // pilares en las 4 esquinas (rematan la franja)
+    const py = 1.2 + 0.14 + 0.21;
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        v.add(1.12, 0.42, 1.12, sx * 7.5, py, sz * 7.5, accent);
+      }
+    }
+    const m = new THREE.Mesh(v.build(), voxelMaterial());
+    m.castShadow = true;
+    m.receiveShadow = true;
+    this.scene.add(m);
+    this.trimMesh = m;
   }
 
   // M1.5-E: repinta el granero con la paleta de la nueva época. Reemplaza los
@@ -452,6 +492,7 @@ export class ParcelRenderer {
       this.wallMesh.setColorAt(idx, c);
     }
     this.wallMesh.instanceColor.needsUpdate = true;
+    this._rebuildWallTrim(level);
     // M1.5-E mood: luz por época (hemi + sol) y fog distinto del cielo
     // (profundidad de horizonte). Sin tocar la física ni el gameplay.
     const mood = MOOD[Math.min(level, MOOD.length - 1)];
