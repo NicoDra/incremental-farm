@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chanchos S.A. — Taller de modelos</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px 'Trebuchet MS', sans-serif; color: #273b42; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      header { position: fixed; top: 16px; left: 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 14px 18px; background: #fff8e7; border: 2px solid #34494f; border-radius: 8px; z-index: 2; }
+      label { display: flex; align-items: center; gap: 6px; }
+      select { font: inherit; padding: 5px; }
+      #labels { position: fixed; inset: 0; pointer-events: none; }
+      #labels span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; font-size: 12px; background: #fff8e7e8; padding: 3px 7px; border-radius: 3px; }
+      footer { position: fixed; bottom: 12px; left: 16px; padding: 8px 12px; background: #fff8e7ed; border-radius: 5px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="models"></canvas>
+    <header>
+      <strong>Taller de modelos</strong>
+      <label>Época <select id="age"><option value="0">Barro</option><option value="1">Madera</option><option value="2">Piedra</option><option value="3">Fábrica</option></select></label>
+      <label>Vista <select id="view"><option value="iso">Isométrica</option><option value="front">Frontal</option><option value="back">Posterior</option><option value="top">Superior</option></select></label>
+      <label>Modelo <select id="subject"><option value="all">Todos</option><option value="barn">Granero</option></select></label>
+      <a href="/">Volver al juego</a>
+    </header>
+    <div id="labels"></div>
+    <footer id="metrics">Arrastrá para orbitar · rueda para acercar · productos ampliados ×1.6</footer>
+    <script type="module" src="/src/render/modelGallery.js"></script>
+  </body>
+</html>

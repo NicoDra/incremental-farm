@@ -14,6 +14,7 @@ import {
 } from 'chanchos-shared';
 import { voxelBuilder, voxelMaterial } from './voxel.js';
 import { getProductGeo } from './products.js';
+import { buildProducerGeo } from './machineModels.js';
 
 const RAMP_TILT = -Math.PI / 4; // -45°: baja hacia el frente local (-z)
 
@@ -25,7 +26,6 @@ const CREAM = '#fff8e7';
 const GOLD = '#f2c94c';
 const TEAL = '#4a9e94';
 const RED = '#e05252';
-const DARK = '#1a1210';
 
 // Chevrón apuntando al -z local
 function chevronGeo(size = 1) {
@@ -65,6 +65,7 @@ function pillars(v, baseY) {
   for (const px of [-0.42, 0.42]) {
     for (const pz of [-0.42, 0.42]) {
       v.add(0.12, baseY, 0.12, px, -baseY / 2 + 0.06, pz, post);
+      v.add(0.20, 0.10, 0.20, px, -baseY + 0.05, pz, '#34494f');
     }
   }
 }
@@ -158,6 +159,23 @@ function buildChannelGeo(type, baseY, age = 0, openWorld = null, rot8 = 0) {
   if (!o.front) v.add(1, 0.6, 0.1, 0, 0.32, -0.45, wood);
   if (!o.back) v.add(1, 0.6, 0.1, 0, 0.32, 0.45, wood);
 
+  // Bordes y abrazaderas ocupan solo paredes cerradas: nunca una boca AUTO.
+  // Color por función y material: interior neutro, estructura de época,
+  // herrajes marfil/metal; no se tiñe todo el modelo con la misma paleta.
+  for (const [side, x, z, lateral] of [
+    ['left', -0.45, 0, true], ['right', 0.45, 0, true],
+    ['front', 0, -0.45, false], ['back', 0, 0.45, false],
+  ]) {
+    if (o[side]) continue;
+    v.add(lateral ? 0.10 : 1, 0.045, lateral ? 1 : 0.10, x, 0.5975, z,
+      age >= 2 ? '#becbd0' : '#d6b47c');
+    for (const s of [-1, 1]) {
+      v.add(lateral ? 0.015 : 0.07, 0.26, lateral ? 0.07 : 0.015,
+        lateral ? x + Math.sign(x) * 0.052 : s * 0.32, 0.27,
+        lateral ? s * 0.32 : z + Math.sign(z) * 0.052, woodDark);
+    }
+  }
+
   if (type === 'curva') {
     // M1.5-D4 punto 4: guía en L ORTOGONAL en la esquina interior
     // (marco local: frente -z, entrada +x). Sin diagonales: la física guía
@@ -178,6 +196,10 @@ function buildChannelGeo(type, baseY, age = 0, openWorld = null, rot8 = 0) {
     v.add(0.16, 0.1, 0.16, 0.45, 0.56, -0.45, GOLD);
   } else if (type === 'rebote') {
     v.add(0.5, 0.1, 0.12, 0, 0.06, -0.5, GOLD);
+    // Tacos de goma dentro de las paredes, sin invadir el carril central.
+    for (const x of [-0.37, 0.37]) {
+      for (const z of [-0.25, 0, 0.25]) v.add(0.05, 0.12, 0.13, x, 0.16, z, '#365b69');
+    }
   }
 
   pillars(v, baseY);
@@ -199,16 +221,26 @@ function buildBridgeGeo(age = 0) {
   }
   v.add(0.16, 0.12, 0.16, -0.48, 0.86, 0, GOLD); // remate superior
   v.add(0.16, 0.12, 0.16, 0.48, 0.86, 0, GOLD);
+  for (const x of [-0.48, 0.48]) {
+    v.add(0.12, 0.06, 1, x, 0.78, 0, '#e5d6b1');
+    v.add(0.08, 0.08, 0.84, x, 0.16, 0, P.dark);
+    for (const z of [-0.24, 0.24]) v.add(0.035, 0.50, 0.055, x + Math.sign(x) * 0.065, 0.45, z, '#b4c5c9');
+  }
   return v.build();
 }
 
 function buildRampGeo(baseY, age = 0) {
   const v = voxelBuilder();
-  const wood = pal(age).wood;
+  const P = pal(age);
+  const wood = P.wood;
   v.add(0.9, 0.08, 1.41, 0, 0, 0, wood);
   v.add(0.95, 0.05, 0.12, 0, 0.06, -0.64, GOLD);
-  v.add(0.1, 0.6, 1.41, -0.46, 0.3, 0, '#6b5233');
-  v.add(0.1, 0.6, 1.41, 0.46, 0.3, 0, '#6b5233');
+  v.add(0.1, 0.6, 1.41, -0.46, 0.3, 0, P.dark);
+  v.add(0.1, 0.6, 1.41, 0.46, 0.3, 0, P.dark);
+  for (const x of [-0.46, 0.46]) {
+    v.add(0.10, 0.045, 1.41, x, 0.6225, 0, '#dfc798');
+    for (const z of [-0.48, 0, 0.48]) v.add(0.025, 0.25, 0.08, x + Math.sign(x) * 0.06, 0.31, z, '#adbfc3');
+  }
   if (baseY > 0.5) {
     // soportes traseros hasta el suelo (marco sin inclinar: se agregan aparte)
     v.add(0.12, 0.4, 0.12, -0.42, -0.5, 0.6, '#6b5633');
@@ -222,117 +254,22 @@ function buildFanGeo(tier = 0, age = 0) {
   const P = pal(age);
   const dark = P.dark;
   const teal = FAN_TIER_COLORS[Math.max(0, Math.min(tier, FAN_TIER_COLORS.length - 1))] || '#4a9e94';
-  const head = 0.34 + tier * 0.05; // cada tier cabezal más grande
+  const head = 0.54 + tier * 0.07;
   v.add(0.5, 0.1, 0.5, 0, 0.05, 0, dark); // base
   v.add(0.2, 0.9, 0.2, 0.35, 0.5, 0.35, dark); // mástil en esquina
   v.add(0.5, 0.1, 0.1, 0.18, 0.9, 0.18, dark, Math.PI / 4); // brazo al cabezal
-  v.add(head, head, 0.3, 0, 0.95, 0, teal); // cabezal (color = tier)
-  v.add(0.4, 0.06, 0.06, 0, 0.95, -0.18, GOLD);
-  if (tier >= 3) v.add(0.2, 0.2, 0.2, 0.35, 1.0, 0.35, GOLD); // remate metal Fábrica
-  return v.build();
-}
-
-function mouthBox(v, y = 0.35) {
-  v.add(0.5, 0.3, 0.12, 0, y, -0.36, DARK); // abertura frontal
-}
-
-function buildProducerGeo(type, age = 0) {
-  const P = pal(age);
-  const v = voxelBuilder();
-  if (type === 'sembrador') {
-    const metal = P.metal;
-    v.add(0.6, 0.5, 0.6, 0, 0.25, 0, metal);
-    v.add(0.44, 0.3, 0.44, 0, 0.62, 0, '#7d8794');
-    v.add(0.5, 0.12, 0.5, 0, 0.82, 0, GOLD);
-    mouthBox(v);
-  } else if (type === 'calabacera') {
-    v.add(0.9, 0.18, 0.9, 0, 0.09, 0, '#5c4326'); // tierra
-    v.add(0.08, 0.06, 0.8, -0.2, 0.2, 0, '#5c8a2a'); // enredaderas
-    v.add(0.08, 0.06, 0.8, 0.2, 0.2, 0, '#5c8a2a');
-    v.add(0.3, 0.28, 0.3, -0.2, 0.3, -0.1, '#e08a3c'); // calabazas deco
-    v.add(0.24, 0.22, 0.24, 0.22, 0.27, 0.15, '#d97f33');
-    v.add(0.4, 0.3, 0.1, 0, 0.15, -0.42, '#4a3820'); // boca: tranquera
-  } else if (type === 'salinera') {
-    v.add(0.82, 0.22, 0.82, 0, 0.11, 0, '#d8dae2');
-    v.add(0.7, 0.3, 0.7, 0, 0.38, 0, '#ececf0');
-    v.add(0.22, 0.18, 0.22, -0.2, 0.6, 0.15, '#ffffff');
-    v.add(0.4, 0.26, 0.1, 0, 0.16, -0.42, '#4a3820');
-  } else if (type === 'pienso') {
-    // M1.5-F5: maíz entra por la izquierda (oeste), calabaza por la derecha
-    // (este); cada entrada tiene su colador tricolor sobre la cara abierta.
-    v.add(0.86, 0.78, 0.86, 0, 0.39, 0, '#6e5a46');
-    v.add(0.7, 0.14, 0.7, 0, 0.84, 0, GOLD);
-    v.add(0.22, 0.4, 0.22, -0.22, 0.95, 0.12, '#9a9aa2'); // tolva izquierda (maíz)
-    v.add(0.22, 0.4, 0.22, 0.22, 0.95, 0.12, '#9a9aa2'); // tolva derecha (calabaza)
-    // Boca frontal sobresale (casco llega a −0.43; la boca queda afuera).
-    v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
-    v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
-    // Entradas por COSTADO (M1.5-F5): a la altura del eje (z≈0), no atrás.
-    // las compuertas son laterales (izda maíz / dcha calabaza), con tinte.
-    v.add(0.1, 0.3, 0.5, -0.42, 0.42, 0, TEAL);      // izquierda (oeste→maíz)
-    v.add(0.1, 0.3, 0.5, 0.42, 0.42, 0, '#e08a3c');   // derecha (este→calabaza)
-  } else if (type === 'corral') {
-    const fence = '#8a5f36';
-    for (const px of [-0.42, 0.42]) {
-      for (const pz of [-0.42, 0.42]) {
-        v.add(0.12, 0.55, 0.12, px, 0.27, pz, fence);
-      }
-    }
-    v.add(0.96, 0.1, 0.1, 0, 0.45, -0.42, fence);
-    v.add(0.96, 0.1, 0.1, -0.24, 0.45, 0.42, fence);
-    v.add(0.1, 0.1, 0.96, -0.42, 0.45, 0, fence);
-    v.add(0.1, 0.1, 0.96, 0.42, 0.45, 0, fence);
-    v.add(0.7, 0.12, 0.7, 0, 0.06, 0, '#c9a86a'); // heno
-    v.add(0.3, 0.24, 0.3, 0.05, 0.24, -0.05, '#f4a8bd'); // cerdito residente
-    v.add(0.5, 0.34, 0.1, 0.22, 0.17, -0.42, DARK); // boca salida: portón abierto
-    v.add(0.5, 0.34, 0.1, -0.22, 0.17, 0.42, DARK); // boca entrada trasera (choclos)
-    // banda de edad en el marco
-    v.add(0.96, 0.08, 0.96, 0, 0.56, 0, pal(age).accent);
-  } else if (type === 'palomitera') {
-    const red = age >= 3 ? P.metal : '#b04a3e';
-    v.add(0.66, 0.7, 0.66, 0, 0.35, 0, red);
-    v.add(0.7, 0.1, 0.7, 0, 0.75, 0, GOLD);
-    v.add(0.3, 0.25, 0.3, 0, 0.92, 0.1, '#7d8794'); // tolva superior
-    v.add(0.16, 0.4, 0.16, -0.2, 1.0, -0.15, '#5d6673'); // chimenea
-    mouthBox(v);
-    v.add(0.5, 0.3, 0.12, 0, 0.35, 0.36, DARK); // abertura trasera (entrada)
-  } else if (type === 'jamonera') {
-    const iron = age >= 3 ? P.metal : '#4a4f58';
-    v.add(0.8, 0.85, 0.8, 0, 0.42, 0, iron);
-    v.add(0.84, 0.12, 0.84, 0, 0.9, 0, '#2b2620');
-    v.add(0.2, 0.5, 0.2, 0.2, 1.15, -0.1, '#6b7078'); // chimenea
-    v.add(0.14, 0.5, 0.14, -0.25, 0.5, 0.32, '#7d8794'); // caños
-    v.add(0.2, 0.14, 0.14, -0.25, 0.78, 0.32, '#7d8794');
-    mouthBox(v, 0.4);
-    v.add(0.55, 0.35, 0.12, 0, 0.4, 0.4, DARK); // abertura trasera (entrada)
-  } else if (type === 'jamonera_industrial') {
-    const iron = age >= 3 ? P.metal : '#4a4f58';
-    v.add(0.9, 0.9, 0.9, 0, 0.45, 0, iron);
-    v.add(0.84, 0.14, 0.84, 0, 0.96, 0, '#2b2620');
-    v.add(0.18, 0.58, 0.18, -0.25, 1.08, -0.15, '#6b7078');
-    v.add(0.18, 0.58, 0.18, 0.25, 1.08, -0.15, '#6b7078');
-    // Boca de salida frontal dorada, sobresaliendo de la cara (0.48 vs pared
-    // 0.45): el cuerpo de la curadora llega hasta z=-0.45, una boca en
-    // -0.36/-0.38 quedaría enterrada dentro del casco (era el bug visual).
-    v.add(0.5, 0.3, 0.12, 0, 0.44, -0.48, GOLD);
-    v.add(0.3, 0.2, 0.1, 0, 0.44, -0.52, DARK);
-    // Entradas por costado (M1.5-F5): la compuerta queda en el lateral y con
-    // tinte; no atrás (es lo que alimentaba a la confusión con el modelo).
-    v.add(0.12, 0.3, 0.45, -0.48, 0.44, 0.02, '#f4a8bd'); // izquierda: cerdo (rosa)
-    v.add(0.12, 0.3, 0.45, 0.48, 0.44, 0.02, '#ececf0'); // derecha: sal (blanca)
-  } else if (type === 'silo') {
-    // M1.5-F4: tanque vertical con entrada trasera (oscura) y boca frontal
-    // (dorada): aberturas físicas distintas para cada lado.
-    const tank = age >= 2 ? P.metal : '#7d8794';
-    v.add(0.9, 0.12, 0.9, 0, 0.06, 0, '#5c4326'); // base
-    v.add(0.7, 0.9, 0.7, 0, 0.57, 0, tank); // cuerpo
-    v.add(0.74, 0.1, 0.74, 0, 1.02, 0, pal(age).accent); // aro de edad
-    v.add(0.5, 0.22, 0.5, 0, 1.18, 0, '#5d6673'); // techo
-    v.add(0.18, 0.14, 0.18, 0, 1.32, 0, GOLD); // remate
-    v.add(0.5, 0.3, 0.12, 0, 0.35, -0.36, GOLD); // boca frontal (salida)
-    v.add(0.3, 0.2, 0.1, 0, 0.35, -0.38, DARK);
-    v.add(0.5, 0.3, 0.12, 0, 0.35, 0.36, DARK); // abertura trasera (entrada)
+  // Marco abierto alrededor del rotor, sin un bloque tapando las aspas.
+  for (const s of [-1, 1]) {
+    v.add(head + 0.10, 0.065, 0.20, 0, 0.95 + s * (head / 2 + 0.0325), -0.02, teal);
+    v.add(0.065, head, 0.20, s * (head / 2 + 0.0175), 0.95, -0.02, teal);
   }
+  v.add(0.20, 0.20, 0.22, 0, 0.95, 0.17, '#34494f');
+  v.add(0.06, 0.06, 0.16, 0, 0.95, -0.01, '#b4c5c9');
+  v.add(0.12, 0.12, 0.05, 0, 0.95, -0.115, GOLD);
+  for (const x of [-0.17, 0.17]) v.add(0.08, 0.035, 0.08, x, 0.12, 0.13, '#b4c5c9');
+  if (tier >= 1) for (const x of [-head / 2, head / 2]) v.add(0.045, head, 0.035, x, 0.95, -0.145, '#d8e4de');
+  if (tier >= 2) for (const y of [0.88, 1.02]) v.add(0.27, 0.035, 0.035, 0, y, 0.295, '#adbfc3');
+  if (tier >= 3) v.add(0.2, 0.2, 0.2, 0.35, 1.0, 0.35, GOLD); // remate metal Fábrica
   return v.build();
 }
 
@@ -344,8 +281,7 @@ export class ToolManager {
     this.bodyMat = voxelMaterial();
     this.lampMat = new THREE.MeshLambertMaterial({ color: GOLD });
     this.lampGeo = new THREE.BoxGeometry(0.14, 0.14, 0.14);
-    this.armGeo = new THREE.BoxGeometry(0.5, 0.1, 0.04);
-    this.armGeo.translate(0.27, 0, 0);
+    this.armGeo = voxelBuilder().add(0.19, 0.07, 0.045, 0.11, 0, 0, CREAM).build();
     this.fanGeos = [0, 1, 2, 3].map((t) => buildFanGeo(t, 0));
     this.fanGeo = this.fanGeos[0];
     this.coneGeoCache = new Map();
@@ -474,6 +410,7 @@ export class ToolManager {
   // flechas, íconos y animaciones siguen colgando del mismo grupo.
   refreshAges(age) {
     const a = Math.max(0, Math.min(age || 0, 3));
+    const oldFanGeos = this.fanGeos;
     this.currentAge = a;
     this.fanGeos = [0, 1, 2, 3].map((t) => buildFanGeo(t, a));
     this.fanGeo = this.fanGeos[Math.max(0, Math.min(this.currentFanTier, 3))];
@@ -481,6 +418,7 @@ export class ToolManager {
       entry.age = a;
       this._rebuildEntryBody(key, entry);
     }
+    for (const geo of oldFanGeos) geo.dispose();
   }
 
   _rebuildEntryBody(key, entry) {
@@ -507,7 +445,7 @@ export class ToolManager {
     parent.add(mesh);
     if (old) {
       parent.remove(old);
-      old.geometry?.dispose?.();
+      if (entry.type !== 'fan') old.geometry?.dispose?.();
     }
     entry.group.userData.bodyMesh = mesh;
   }
@@ -664,9 +602,10 @@ export class ToolManager {
       head.position.set(0, 0.95, 0);
       head.rotation.x = ((pitchDeg || 0) * Math.PI) / 180;
       const blades = new THREE.Group();
-      blades.position.z = -0.22;
+      blades.position.z = -0.065;
       for (let b = 0; b < 3; b++) {
         const arm = new THREE.Mesh(this.armGeo, this.bodyMat);
+        arm.scale.setScalar(1 + fanTier * 0.12);
         arm.rotation.z = (b * Math.PI * 2) / 3;
         blades.add(arm);
       }

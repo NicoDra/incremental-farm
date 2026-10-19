@@ -137,12 +137,29 @@ function buildDepotGate(age = 0) {
   const vb = voxelBuilder();
   // paredes
   vb.add(W * 2, WH, 0.16, 0, WH / 2, bz, WOOD_L);
-  vb.add(0.16, WH, DEPTH, -W, WH / 2, midZ, WOOD_D);
-  vb.add(0.16, WH, DEPTH,  W, WH / 2, midZ, WOOD_D);
+  // Costados segmentados alrededor de las ventanas: los marcos tienen vano.
+  const sideSpan = (DEPTH - 0.66) / 2;
+  for (const x of [-W, W]) {
+    for (const z of [bz + sideSpan / 2, fz - sideSpan / 2]) {
+      vb.add(0.16, WH, sideSpan, x, WH / 2, z, WOOD_D);
+    }
+    vb.add(0.16, 0.54, 0.66, x, 0.27, midZ, WOOD_D);
+    vb.add(0.16, WH - 0.98, 0.66, x, (WH + 0.98) / 2, midZ, WOOD_D);
+  }
   const sideW = W - DW;
   vb.add(sideW, WH, 0.16, -(DW + sideW / 2), WH / 2, fz, WOOD_L);
   vb.add(sideW, WH, 0.16,  (DW + sideW / 2), WH / 2, fz, WOOD_L);
   vb.add(DW * 2, WH - DH, 0.16, 0, DH + (WH - DH) / 2, fz, WOOD_L);
+  // Zócalo y montantes pertenecen al edificio; la entrada conserva el paso libre.
+  for (const x of [-W, W]) {
+    vb.add(0.22, 0.14, DEPTH, x, 0.07, midZ, '#d2c3a5');
+    for (const z of [bz, fz]) vb.add(0.22, WH, 0.22, x, WH / 2, z, DOOR_BAR);
+    // Ventanas altas del costado con marco, alféizar y parteluz.
+    const wx = x + Math.sign(x) * 0.10;
+    vb.add(0.055, 0.44, 0.66, wx, 0.76, midZ, '#344c56');
+    for (const y of [0.51, 1.01]) vb.add(0.10, 0.06, 0.78, wx, y, midZ, SIGN_BG);
+    for (const z of [midZ - 0.36, midZ, midZ + 0.36]) vb.add(0.10, 0.44, 0.055, wx, 0.76, z, SIGN_BG);
+  }
   // marco dorado
   vb.add(JT, DH, 0.2, -(DW - JT / 2), DH / 2, fz + 0.02, TRIM);
   vb.add(JT, DH, 0.2,  (DW - JT / 2), DH / 2, fz + 0.02, TRIM);
@@ -217,15 +234,30 @@ function buildDepotGate(age = 0) {
     const frac = s / 4;
     vb.add(tW / 4 + 0.04, 0.18, DEPTH + 0.36,
       -tW + frac * tW + tW / 8,
-      roofY + frac * ridgeH * 0.5 + ridgeH * 0.05,
+      roofY + (frac + 0.125) * ridgeH,
       midZ, PLANK_H);
     vb.add(tW / 4 + 0.04, 0.18, DEPTH + 0.36,
        tW - frac * tW - tW / 8,
-      roofY + frac * ridgeH * 0.5 + ridgeH * 0.05,
+       roofY + (frac + 0.125) * ridgeH,
       midZ, PLANK_H);
   }
   vb.add(0.18, 0.22, DEPTH + 0.4, 0, roofY + ridgeH, midZ, PLANK_R);
-  vb.add(W * 2, 0.18, 0.14, 0, roofY + ridgeH * 0.5, fz - 0.06, PLANK_H);
+  // Frontones escalonados sostienen el tejado sin un travesaño flotante.
+  for (let step = 0; step < 4; step++) {
+    const height = roofY + (step + 0.5) * ridgeH / 4 - 0.09 - WH;
+    for (const s of [-1, 1]) for (const z of [fz - 0.06, bz]) {
+      vb.add(tW / 4, height, 0.14, s * (tW - (step + 0.5) * tW / 4), WH + height / 2, z, WOOD_L);
+    }
+  }
+  // Respiradero de cumbrera: volumen escalonado que distingue el granero.
+  const ventZ = bz + 0.85;
+  vb.add(0.62, 0.10, 0.62, 0, roofY + ridgeH + 0.10, ventZ, PLANK_R);
+  vb.add(0.42, 0.30, 0.42, 0, roofY + ridgeH + 0.29, ventZ, SIGN_BG);
+  for (const y of [roofY + ridgeH + 0.23, roofY + ridgeH + 0.34]) {
+    vb.add(0.29, 0.045, 0.025, 0, y, ventZ + 0.225, DOOR_C);
+  }
+  vb.add(0.60, 0.09, 0.60, 0, roofY + ridgeH + 0.485, ventZ, PLANK_H);
+  vb.add(0.38, 0.08, 0.38, 0, roofY + ridgeH + 0.57, ventZ, PLANK_H);
   // cartel
   const SW = DW * 2 + 0.5, SH = 0.72;
   const sZ = fz + 0.22;
@@ -244,11 +276,22 @@ function buildDepotGate(age = 0) {
   function buildLeaf(sx) {
     const vd = voxelBuilder();
     // Panel centrado en x=0 localmente; la bisagra queda en x = -sx*leafW/2
-    vd.add(leafW, DH - JT, 0.1,  sx * leafW / 2, DH / 2 - JT / 2, 0, DOOR_C);
-    vd.add(leafW, 0.08,    0.12, sx * leafW / 2, DH * 0.52,       0, DOOR_BAR);
+    // Desde la bisagra exterior, cada hoja se extiende hacia el centro del hueco.
+    const inward = -sx;
+    for (let plank = 0; plank < 6; plank++) {
+      vd.add(leafW / 6 - 0.012, DH - JT, 0.10,
+        inward * (plank + 0.5) * leafW / 6, DH / 2 - JT / 2, 0, DOOR_C);
+    }
+    for (const y of [0.18, 0.82]) vd.add(leafW, 0.08, 0.13, inward * leafW / 2, y, 0.025, DOOR_BAR);
+    // Riostra escalonada y tirador, apoyados sobre los tablones.
+    for (let step = 0; step < 6; step++) {
+      vd.add(leafW / 6 + 0.025, 0.10, 0.05, inward * (step + 0.5) * leafW / 6,
+        0.23 + step * 0.105, 0.085, DOOR_BAR);
+    }
+    vd.add(0.08, 0.18, 0.07, inward * (leafW - 0.13), 0.50, 0.12, METAL);
     for (const by of [0.25, 0.85]) {
       // bisagra en el borde interior (x = 0 lado bisagra)
-      vd.add(0.1, 0.1, 0.14, sx * 0.1, DH * by, 0, METAL);
+      vd.add(0.1, 0.1, 0.14, inward * 0.1, DH * by, 0, METAL);
     }
     const m = new THREE.Mesh(vd.build(), voxelMaterial());
     m.castShadow = true;
@@ -335,7 +378,7 @@ export class ParcelRenderer {
     for (const m of [this._gateBody, this._doorL, this._doorR]) {
       if (!m) continue;
       this.scene.remove(m);
-      m.traverse((o) => o.geometry?.dispose?.());
+      m.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
     }
     const gate = buildDepotGate(age);
     this._gateBody = gate.body;
@@ -482,7 +525,6 @@ export class ParcelRenderer {
       sun.color.set(mood.sun);
       sun.intensity = mood.sunI;
     }
-    this.scene.background.set(pal.sky);
     if (this.scene.fog) this.scene.fog.color.set(mood.fog);
     // M1.5-E etapa 4: cielo gradiente (arriba pal.sky, abajo el fog/horizonte)
     if (this._skyTex) this._skyTex.dispose();
