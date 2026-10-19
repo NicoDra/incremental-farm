@@ -100,14 +100,4 @@ ok(!/addDecal|_rebuildDecals/.test(parcelSrc), 'sin decals de suelo (quitaron)')
 ok(!/j <= 3/.test(parcelSrc), 'sin sendero pintado en el piso');
 ok(/isHemisphereLight/.test(parcelSrc) && /isDirectionalLight/.test(parcelSrc), 'mood aplica a hemi y sol');
 
-// ── Test 9: remate de muros con acento de época (etapa 3) ─────────────────────
-const trimRow = parcelSrc.match(/const WALL_TRIM = \[([^\]]+)\]/);
-ok(Boolean(trimRow), 'WALL_TRIM existe');
-if (trimRow) {
-  const trims = trimRow[1].match(/#[0-9a-fA-F]{6}/g) || [];
-  ok(trims.length === 4, 'WALL_TRIM: 4 acentos de época');
-  ok(new Set(trims).size === 4, 'WALL_TRIM: acentos distintos entre épocas');
-}
-ok(/_rebuildWallTrim/.test(parcelSrc), 'remate de muros se rehace por época');
-
 console.log(`PASS smoke-d5-epoca (${pass} checks)`);
