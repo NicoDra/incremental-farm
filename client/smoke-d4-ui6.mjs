@@ -45,10 +45,10 @@ ok(/JAM_MS/.test(world), 'lógica de atasco usa JAM_MS');
 const floatBody = (css.match(/\.float\s*\{([^}]*)\}/) || [])[1] || '';
 ok(/text-shadow/.test(floatBody), '.float con contorno (text-shadow)');
 
-// 5. sel-panel en el rail izquierdo, sin absolute
-const iRail = html.indexOf('id="left-rail"');
+// 5. sel-panel en el mismo panel derecho, sin absolute
+const iRail = html.indexOf('id="inspect-panel"');
 const iSel = html.indexOf('id="sel-panel"');
-ok(iRail >= 0 && iSel > iRail, '#sel-panel dentro de #left-rail');
+ok(iRail >= 0 && iSel > iRail && !/id="left-rail"/.test(html), '#sel-panel dentro del inspector unificado');
 const selBodies = [...css.matchAll(/#sel-panel\s*\{([^}]*)\}/g)].map((m) => m[1]);
 ok(selBodies.length > 0 && !selBodies.some((b) => /position\s*:\s*absolute/.test(b)), '#sel-panel sin absolute');
 

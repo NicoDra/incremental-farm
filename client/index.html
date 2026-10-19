@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chanchos S.A. — Simulador Agrocorporativo</title>
     <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/ui/gameHud.css" />
   </head>
   <body>
     <div id="app">
@@ -16,59 +17,68 @@
             <span id="level-name">Corral de Barro S.A.</span>
           </div>
           <div id="stats">
-            <div id="money" title="Monedas">$50</div>
+             <div id="money" title="Dinero disponible">$75</div>
             <div id="age-badge" title="Edad actual">Barro</div>
             <div id="combo-badge" class="hidden">COMBO</div>
           </div>
           <div id="top-actions">
-            <button id="btn-sell-ground" title="Vender todo lo suelto">$</button>
-            <button id="btn-dirs" title="Mostrar direcciones (G)">⇄</button>
-            <button id="btn-help" title="Ayuda (P)">?</button>
-            <button id="btn-more" title="Acciones globales">⋯</button>
-            <button id="btn-drawer" title="Abrir panel: mejoras y edad (E)">☰</button>
+            <button id="btn-drawer" title="Construir (E)" aria-controls="drawer" aria-expanded="false">Construir <kbd>E</kbd></button>
+            <button id="btn-help" title="Ayuda y atajos (P)" aria-controls="guide" aria-expanded="false">?</button>
+            <button id="btn-more" title="Acciones de la granja" aria-controls="global-menu" aria-expanded="false">⋯</button>
           </div>
         </header>
 
+        <button id="objective" title="Ver requisitos de la próxima época" aria-controls="drawer">
+          <span id="objective-title">Próxima época</span>
+          <span id="objective-summary"></span>
+          <progress id="objective-progress" max="1" value="0" aria-label="Progreso hacia la próxima época"></progress>
+        </button>
+
         <div id="global-menu" class="hidden">
-          <button id="act-sell-ground">Vender suelo</button>
+          <button id="act-sell-ground">Liquidar productos sueltos</button>
+          <p id="liquidation-info">La liquidación no suma a las metas de entrega.</p>
           <button id="act-reset">Reiniciar parcela</button>
           <button id="act-dirs">Mostrar direcciones (G)</button>
         </div>
 
-        <div id="guide" class="hidden">
-          <p><b>Primer minuto:</b> hacé clic en el <b>sembrador</b> para emitir maíz gratis, y conectalo al <b>portal norte</b> con canaletas o con el <b>ventilador</b> (la potencia del tier 0 ya alimenta bastante).</p>
-          <p>Con un <b>ventilador</b> seleccionado, <kbd>B</kbd> sube la potencia y <kbd>N</kbd> el alcance (solo reducen desde lo ganado).</p>
-          <p>La <b>Liquidación</b> paga 10 % del valor base y entra en el combo solo por la suma; el combo nunca sube mas de x1 para la liquidación.</p>
-            <p><b>Objetivo actual:</b> la barra de edad muestra lo que falta: dinero y productos por el portal. Liquidar no suma a ninguna meta.</p>
+        <div id="guide" class="hidden" role="dialog" aria-modal="false" aria-labelledby="guide-title">
+          <h2 id="guide-title">De la granja al granero</h2>
+          <p>Producí, conectá las bocas y entregá por el <b>granero</b>. Cobrás por cada entrega; invertí en automatizar y avanzá de época.</p>
+          <p><b>Primer circuito:</b> seleccioná el sembrador y pulsá <b>Emitir choclo</b>. Conectalo al granero con canaletas o un ventilador. La mejora global de velocidad automatiza todos los sembradores.</p>
+          <p><b>Entregar y liquidar son distintos:</b> liquidar productos sueltos paga una fracción del valor base y no suma a las metas del granero.</p>
+          <p><b>Objetivo actual:</b> necesitás dinero y productos entregados juntos. La barra superior abre el detalle.</p>
+          <dl class="shortcut-list">
+            <dt>1–9 / 0</dt><dd>Elegir pieza</dd><dt>R / F</dt><dd>Rotar / inclinar ventilador</dd>
+            <dt>H / [ / ]</dt><dd>Altura de construcción</dd>            <dt>M / X / I</dt><dd>Mover / demoler / copiar pieza apuntada</dd>
+            <dt><kbd>B</kbd> / <kbd>N</kbd></dt><dd>Potencia / alcance del ventilador seleccionado (por pasos)</dd>
+            <dt>G</dt><dd>Mostrar direcciones</dd><dt>Ctrl+Z / Ctrl+Y</dt><dd>Deshacer / rehacer</dd>
+            <dt>WASD / flechas</dt><dd>Desplazar cámara</dd><dt>Esc / clic derecho</dt><dd>Cancelar</dd>
+          </dl>
           <button id="btn-close-guide">Entendido</button>
         </div>
 
         <div id="floats"></div>
-        <div id="toasts"></div>
+        <div id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
 
         <aside id="drawer" class="hidden" aria-label="Panel lateral">
+          <div id="drawer-header"><h2 id="drawer-heading">Construir</h2><button id="btn-close-drawer" title="Cerrar panel (Esc)" aria-label="Cerrar panel">✕</button></div>
           <div id="drawer-tabs">
             <button data-tab="build" class="drawer-tab selected">Construir</button>
-            <button data-tab="up" class="drawer-tab">Mejoras</button>
-            <button data-tab="age" class="drawer-tab">Edad</button>
-            <button id="btn-close-drawer" title="Cerrar (Esc)">✕</button>
+            <button data-tab="up" class="drawer-tab">Mejoras globales</button>
+            <button data-tab="age" class="drawer-tab">Progreso</button>
           </div>
+          <button id="btn-inspect" class="hidden" title="Volver a la pieza seleccionada">Esta pieza</button>
           <div id="drawer-body">
-            <section data-panel="build" class="drawer-panel"></section>
+            <section data-panel="build" class="drawer-panel"><div id="height-sel" title="Altura de construcción (H, [ y ])"></div></section>
             <section data-panel="up" class="drawer-panel hidden"></section>
             <section data-panel="age" class="drawer-panel hidden"></section>
+            <section id="inspect-panel" class="drawer-panel hidden"><div id="sel-panel" class="hidden"></div></section>
           </div>
         </aside>
 
-        <div id="left-rail">
-          <div id="height-sel" title="Altura de construcción ([ y ])"></div>
-          <div id="sel-panel" class="hidden"></div>
-        </div>
         <div id="hint">
-          Clic: colocar · Arrastrar: barrer celdas · Clic en pieza: inspeccionar ·
-          <kbd>1</kbd>–<kbd>9</kbd>/<kbd>0</kbd>: pieza · <kbd>R</kbd>: rotar · <kbd>H</kbd>: altura ·
-          <kbd>I</kbd>: copiar · <kbd>B</kbd>: potencia ventilador · <kbd>N</kbd>: alcance ventilador ·
-          <kbd>Ctrl</kbd>+<kbd>Z</kbd>: deshacer · Clic derecho: cancelar · <span id="cfg"></span>
+          <span id="cfg">Seleccioná una máquina o abrí Construir.</span>
+          <span id="context-help">Rueda: zoom · WASD: cámara · P: ayuda</span>
         </div>
       </div>
     </div>

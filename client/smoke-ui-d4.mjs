@@ -17,10 +17,10 @@ const fail = (msg) => {
   process.exit(1);
 };
 
-// (a) #sel-panel dentro de #left-rail
-const railMatch = html.match(/<div\b[^>]*id="left-rail"[^>]*>([\s\S]*?)<div id="hint"/);
-if (!railMatch) fail('#left-rail no encontrado en index.html');
-if (!/id="sel-panel"/.test(railMatch[1])) fail('#sel-panel no es descendiente de #left-rail');
+// (a) Inspección dentro del panel de trabajo único, no en un rail enfrentado.
+const drawerMatch = html.match(/<aside\b[^>]*id="drawer"[^>]*>([\s\S]*?)<\/aside>/);
+if (!drawerMatch || !/id="inspect-panel"[\s\S]*id="sel-panel"/.test(drawerMatch[1])) fail('inspector fuera del panel unificado');
+if (/id="left-rail"/.test(html)) fail('persiste un segundo panel de trabajo a la izquierda');
 
 // extrae todos los cuerpos de reglas para un selector dado (CSS plano, sin anidar)
 const ruleBodies = (selectorRe) => {

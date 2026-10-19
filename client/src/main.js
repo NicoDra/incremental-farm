@@ -21,6 +21,8 @@ import {
   toolCost,
   snapRot8,
   upgradeInPlaceCost,
+  BULK_LIQUIDATION_COOLDOWN_MS,
+  LIQUIDATION_RATE,
 } from 'chanchos-shared';
 import { createScene } from './render/scene.js';
 import { ParcelRenderer } from './render/parcel.js';
@@ -137,7 +139,15 @@ async function boot() {
     onPauseToggle: () => togglePauseSelected(),
     onFanPower: () => cycleFanTune('power'),
     onFanRange: () => cycleFanTune('range'),
-    onSellGround: () => sellAllGround(),
+    onSellGround: () => onSellGroundPress(),
+    getLiquidationPreview: () => ({
+      count: sim.products.length,
+      value: sim.products.reduce((sum, p) => sum + state.liquidateValue(p.kind, { jumbo: p.jumbo }), 0),
+      remaining: Math.max(0, Math.ceil((bulkCooldownAt - now()) / 1000)),
+      rate: LIQUIDATION_RATE,
+    }),
+    onRotate: () => rotateCurrent(),
+    onCancel: () => clearModeAndSelection(),
     onCloseSelection: () => setSelectionFromEntry(null),
   });
   hud.setHeight(0);
@@ -155,7 +165,10 @@ async function boot() {
     else if (mode === 'remove') piece = `Demoler (devuelve ${Math.round(state.refundRate() * 100)}%)`;
     else if (mode === 'move-armed') piece = 'Mover (gratis)';
     else if (mode && mode.moving) piece = `Moviendo ${TOOLS[mode.moving.type].name} (gratis)`;
-    let cfg = `Pieza: ${piece} · Frente: ${dirName} · Altura: N${height} · Vent: ${pitchDeg}°`;
+    let cfg = mode ? `${piece} · Frente ${dirName} · ${height === 0 ? 'Suelo' : `Nivel ${height}`}`
+      : selectedKey ? `Seleccionada: ${TOOLS[sim.tools.get(selectedKey)?.type]?.name || 'pieza'}`
+        : 'Seleccioná una máquina o abrí Construir (E).';
+    if (mode?.type === 'fan') cfg += ` · Inclinación ${pitchDeg}°`;
     // M1.5-F4: aviso en preview si la boca del silo quedaría pegada a una máquina.
     if (mode && mode.type === 'silo' && hoverCell) {
       const mc = siloMouthComplaint(hoverCell, height, rot8);
@@ -215,14 +228,10 @@ async function boot() {
       hud.toast(`Esperá ${s}s para volver a liquidar el suelo.`);
       return;
     }
-    bulkCooldownAt = now + 30_000;
-    // castigo el combo actual por unidad liquidada a mano (mínimo x1.0)
-    if (state.comboSteps > 0) {
-      const drop = Math.max(1, Math.floor(0.25 / 0.1));
-      state.comboSteps = Math.max(0, state.comboSteps - drop);
-      state.comboUntil = state.comboSteps > 0 ? state.comboUntil : 0;
-      state.emit();
-    }
+    if (!sim.products.length) { hud.toast('No hay productos sueltos para liquidar.'); return; }
+    // El pago y la penalidad de combo siguen teniendo una sola fuente:
+    // registerLiquidation. Aquí solo se controla el enfriamiento global.
+    bulkCooldownAt = now + BULK_LIQUIDATION_COOLDOWN_MS;
     sellAllGround();
   }
 
@@ -383,6 +392,7 @@ async function boot() {
   }
 
   function findAtCell(cell) {
+    if (Number.isInteger(cell.h) && sim.tools.has(sim.key(cell.i, cell.j, cell.h))) return { i: cell.i, j: cell.j, h: cell.h };
     if (sim.tools.has(sim.key(cell.i, cell.j, height))) {
       return { i: cell.i, j: cell.j, h: height };
     }
@@ -517,6 +527,8 @@ async function boot() {
       dir: DIR_NAMES[entry.rot8],
       h: entry.h,
       isSembrador: entry.type === 'sembrador',
+      isManual: entry.type === 'sembrador' && !state.upgradeLevel('sembra_vel'),
+      outputName: PRODUCTS[def.output || def.product]?.name || '',
       refund,
       refundPct: Math.round(state.refundRate() * 100),
       ageTier,
@@ -542,6 +554,7 @@ async function boot() {
       toolsR.setSelectedKey(null);
       toolsR.clearSelection();
       hud.showSelection(null);
+      updateConfig();
       return;
     }
     const key = sim.key(entry.i, entry.j, entry.h);
@@ -552,7 +565,8 @@ async function boot() {
     refreshFanCone(entry);
     const info = entryInfo(entry);
     hud.showSelection(info);
-    if (!mode) hud.focusUpgradesForTool(entry.type, info);
+    if (!mode) hud.openDrawer('inspect');
+    updateConfig();
   }
 
   // M1.5-G: extrae ajuste de ventilador de modo/snapshot/pieza para
@@ -590,8 +604,13 @@ async function boot() {
     const cur = sim.getFanTune(entry);
     let next;
     if (which === 'power') {
+      // Desciende por pasos desde el máximo ganado (100 → 75 → 50 → 25 → 100),
+      // igual que anuncian el tooltip del botón y la ayuda. Un valor desconocido
+      // vuelve al máximo antes de volver a bajar.
       const i = FAN_POWER_STEPS.indexOf(cur.powerPct);
-      next = { powerPct: FAN_POWER_STEPS[(i + 1 + FAN_POWER_STEPS.length) % FAN_POWER_STEPS.length] };
+      next = i === -1
+        ? { powerPct: FAN_POWER_STEPS[FAN_POWER_STEPS.length - 1] }
+        : { powerPct: FAN_POWER_STEPS[(i - 1 + FAN_POWER_STEPS.length) % FAN_POWER_STEPS.length] };
     } else {
       const top = Math.max(1, Math.floor(sim.fanParams(entry).maxRange));
       next = { rangeCells: cur.rangeCells === null ? 1 : (cur.rangeCells >= top ? null : cur.rangeCells + 1) };
@@ -1205,6 +1224,10 @@ async function boot() {
   }
 
   function runCancelChain() {
+    if (!hud.el.globalMenu.classList.contains('hidden')) {
+      hud.hideGlobalMenu();
+      return true;
+    }
     if (hud.isGuideOpen()) {
       hud.hideGuide();
       return true;
@@ -1249,7 +1272,6 @@ async function boot() {
     hud.refresh();
     updateGhost();
     updateConfig();
-    hud.showGuide();
     hud.toast('Demoler devuelve el 100% en esta edad.');
   }
 
@@ -1273,8 +1295,7 @@ async function boot() {
   sim.setFanTier(state.fanTier());
   sim.setModifiers(state.simModifiers());
   hud.refresh();
-  hud.showGuide();
-  hud.toast('Demoler devuelve el 100% en esta edad.');
+  hud.toast('Empezá por el sembrador. Seleccionalo para emitir choclos o ver sus mejoras globales.');
   hud.setDirsToggle(false);
   initDebugPanel();
 
@@ -1288,6 +1309,19 @@ async function boot() {
   function pickCell(e) {
     pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
     raycaster.setFromCamera(pointer, view.camera);
+    // Inspeccionar apunta al modelo visible, no a la baldosa que queda detrás
+    // de su silueta al proyectar el cursor sobre el suelo isométrico.
+    if (!mode || mode === 'move-armed') {
+      let nearest = null;
+      let distance = Infinity;
+      for (const [key, rendered] of toolsR.entries) {
+        const body = rendered.group.userData.bodyMesh;
+        if (!body) continue;
+        const hit = raycaster.intersectObject(body, false)[0];
+        if (hit && hit.distance < distance) { distance = hit.distance; nearest = sim.tools.get(key); }
+      }
+      if (nearest) return { i: nearest.i, j: nearest.j, h: nearest.h };
+    }
     if (!raycaster.ray.intersectPlane(pickPlane, hitPoint)) return null;
     const i = Math.floor(hitPoint.x + HALF_GRID);
     const j = Math.floor(hitPoint.z + HALF_GRID);
@@ -1518,11 +1552,30 @@ async function boot() {
     view.controls.target.add(camDir);
   }
 
+  function rotateCurrent() {
+    const selEntry = !mode && selectedKey ? sim.tools.get(selectedKey) : null;
+    if (selEntry) { rotatePlacedEntry(selEntry); return; }
+    const type = mode && (mode.type || (mode.moving && mode.moving.type));
+    if (!type) return;
+    if (type !== 'fan' && rot8 % 2 !== 0) rot8 = snapRot8(type, rot8);
+    else rot8 = (rot8 + (type === 'fan' ? 1 : 2)) % 8;
+    if (mode.moving) mode.moving.rot8 = rot8;
+    updateGhost();
+    updateConfig();
+  }
+
+  let keyboardNavigatingHud = false;
+  window.addEventListener('pointerdown', () => { keyboardNavigatingHud = false; });
   window.addEventListener('keydown', (e) => {
     const lk = e.key.toLowerCase();
+    if (e.key === 'Tab') { keyboardNavigatingHud = true; camKeys.clear(); }
     // M1.5-G fix: escribiendo en inputs (panel debug) los atajos no actúan.
     const tag = (e.target && e.target.tagName) || '';
-    if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) {
+      if (e.key === 'Escape') { e.target.blur(); if (runCancelChain()) e.preventDefault(); }
+      return;
+    }
+    if (keyboardNavigatingHud && e.target?.closest?.('#hud') && e.key !== 'Escape') return;
     // Ctrl+Z / Ctrl+Y: deshacer y rehacer (place | sell | move).
     if ((e.ctrlKey || e.metaKey) && lk === 'z') {
       e.preventDefault();
@@ -1549,19 +1602,10 @@ async function boot() {
     }
     if (e.key >= '1' && e.key <= '9') {
       selectHotbar(Number(e.key) - 1);
+    } else if (e.key === '0') {
+      selectHotbar(9);
     } else if (e.key === 'r' || e.key === 'R') {
-      const selEntry = !mode && selectedKey ? sim.tools.get(selectedKey) : null;
-      if (selEntry) rotatePlacedEntry(selEntry);
-      else {
-        const t = mode && (mode.type || (mode.moving && mode.moving.type));
-        // M1.5-D2: R primero endereza (snap) una orientación inválida, sin rotar.
-        if (t && t !== 'fan' && rot8 % 2 !== 0) rot8 = snapRot8(t, rot8);
-        else if (t === 'fan') rot8 = (rot8 + 1) % 8;
-        else rot8 = (rot8 + 2) % 8;
-        if (mode && mode.moving) mode.moving.rot8 = rot8;
-        updateGhost();
-        updateConfig();
-      }
+      rotateCurrent();
     } else if (e.key === 'f' || e.key === 'F') {
       pitchDeg = pitchDeg === 0 ? 45 : 0;
       if (mode && mode.moving) mode.moving.pitchDeg = pitchDeg;

@@ -10,6 +10,7 @@ const SMOKES = [
   'smoke-d2.mjs',
   'smoke-rot.mjs',
   'smoke-ui-d4.mjs',
+  'smoke-ui-pc.mjs',
   'smoke-d4-3abc.mjs',
   'smoke-d4-autojoin.mjs',
   'smoke-d4-curva.mjs',
