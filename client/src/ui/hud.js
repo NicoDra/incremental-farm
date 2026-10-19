@@ -2,7 +2,9 @@
 // (menú agrupado por categoría, reemplaza la hotbar) + selección.
 // Lee todo de GameState (no duplica reglas): canBuyTool, toolPrice, upgrade*,
 // nextAgePreview, refundRate, allowedRect.
-import { TOOLS, TOOL_ORDER, TOOL_CATEGORIES, UPGRADE_LINES, PRODUCTS, AGE_GOALS, COMBO_MAX_BY_AGE, LEVELS, formatMoney } from 'chanchos-shared';
+import { TOOLS, TOOL_ORDER, TOOL_CATEGORIES, UPGRADE_LINES, PRODUCTS, AGE_GOALS, COMBO_MAX_BY_AGE, LEVELS, ageInfo, toolUnlockAge, formatMoney } from 'chanchos-shared';
+import { TOOL_LABELS, ageProgress, upgradeReason } from './presentation.js';
+import { reconcileChildren } from './dom.js';
 
 const ICONS = {
   recta: '┃',
@@ -43,14 +45,13 @@ export class Hud {
         build: document.querySelector('[data-panel="build"]'),
         up: document.querySelector('[data-panel="up"]'),
         age: document.querySelector('[data-panel="age"]'),
+        inspect: byId('inspect-panel'),
       },
       heights: byId('height-sel'),
       cfg: byId('cfg'),
       toasts: byId('toasts'),
       guide: byId('guide'),
       sel: byId('sel-panel'),
-      btnSellGround: byId('btn-sell-ground'),
-      btnDirs: byId('btn-dirs'),
       btnHelp: byId('btn-help'),
       btnMore: byId('btn-more'),
       globalMenu: byId('global-menu'),
@@ -58,10 +59,25 @@ export class Hud {
       actReset: byId('act-reset'),
       actDirs: byId('act-dirs'),
       btnDrawer: byId('btn-drawer'),
+      btnInspect: byId('btn-inspect'),
+      heading: byId('drawer-heading'),
+      objective: byId('objective'),
+      objectiveTitle: byId('objective-title'),
+      objectiveSummary: byId('objective-summary'),
+      objectiveProgress: byId('objective-progress'),
+      contextHelp: byId('context-help'),
+      liquidationInfo: byId('liquidation-info'),
     };
     // Orden estable = TOOL_ORDER; atajos 1-9 + 0 (décima).
     this.hotbarOrder = TOOL_ORDER.slice();
     this.height = 0;
+    this.activeTab = 'build';
+    this.scrollPositions = new Map();
+    this.buildFilter = 'all';
+    this.buildQuery = '';
+    this.showLocked = false;
+    this.mode = null;
+    this.selectionInfo = null;
     this.upgradeFocusType = null;
     this.upgradeFocusInfo = null;
     this._guideTimer = null;
@@ -70,8 +86,6 @@ export class Hud {
     this.buildHeightButtons();
     this.buildBuildCards();
     this.buildEraOverlay();
-    this.el.btnSellGround.addEventListener('click', () => this.cb.onSellGround?.());
-    this.el.btnDirs.addEventListener('click', () => this.cb.onToggleDirs?.());
     this.el.btnHelp.addEventListener('click', () => this.showGuide());
     this.el.btnMore.addEventListener('click', () => this.toggleGlobalMenu());
     this.el.actSellGround.addEventListener('click', () => {
@@ -86,10 +100,18 @@ export class Hud {
       this.cb.onToggleDirs?.();
       this.hideGlobalMenu();
     });
-    this.el.btnDrawer.addEventListener('click', () => this.toggleDrawer());
+    this.el.btnDrawer.addEventListener('click', () => this.toggleDrawer('build'));
+    this.el.objective.addEventListener('click', () => this.openDrawer('age'));
+    this.el.btnInspect.addEventListener('click', () => this.openDrawer('inspect'));
+    this.el.panels.age.addEventListener('click', (event) => {
+      const button = event.target?.closest?.('.age-buy');
+      if (button && !button.disabled) this.cb.onLevel?.();
+    });
     byId('btn-close-drawer').addEventListener('click', () => this.closeDrawer());
     this.el.drawerTabs.forEach((t) =>
-      t.addEventListener('click', () => this.openDrawer(t.dataset.tab)),
+      t.addEventListener('click', () => {
+        this.openDrawer(t.dataset.tab);
+      }),
     );
     byId('btn-close-guide').addEventListener('click', () => this.hideGuide());
     // M1.5-G fix: el panel se reconstruye en cada frame (estados vivos), así
@@ -106,6 +128,8 @@ export class Hud {
       else if (act === 'close') this.cb.onCloseSelection?.();
       else if (act === 'fan-power') this.cb.onFanPower?.();
       else if (act === 'fan-range') this.cb.onFanRange?.();
+      else if (act === 'global-upgrades') this.focusUpgradesForTool(this.selectionInfo?.type, this.selectionInfo);
+      else if (act === 'rotate') this.cb.onRotate?.();
     });
     document.addEventListener?.('pointerdown', (ev) => {
       if (this.el.globalMenu.classList.contains('hidden')) return;
@@ -193,6 +217,8 @@ export class Hud {
 
   buildBuildCards() {
     this.cards = new Map();
+    this.cardViews = new Map();
+    this.buildGroups = [];
     const sec = this.el.panels.build;
     sec.innerHTML = '';
     const toolsBox = document.createElement('div');
@@ -213,23 +239,71 @@ export class Hud {
     row.appendChild(mv);
     row.appendChild(rm);
     toolsBox.appendChild(row);
+    const context = document.createElement('div');
+    context.className = 'build-context hidden';
+    this.buildContext = context;
+    const heightLabel = document.createElement('span');
+    heightLabel.textContent = 'Colocar en';
+    context.appendChild(heightLabel);
+    context.appendChild(this.el.heights);
+    this.rotateBuildBtn = document.createElement('button');
+    this.rotateBuildBtn.className = 'tool-mode';
+    this.rotateBuildBtn.textContent = 'Rotar (R)';
+    this.rotateBuildBtn.addEventListener('click', () => this.cb.onRotate?.());
+    context.appendChild(this.rotateBuildBtn);
+    const cancel = document.createElement('button');
+    cancel.className = 'tool-mode';
+    cancel.textContent = 'Cancelar (Esc)';
+    cancel.addEventListener('click', () => this.cb.onCancel?.());
+    context.appendChild(cancel);
+    toolsBox.appendChild(context);
+    const filters = document.createElement('div');
+    filters.className = 'build-filters';
+    const search = document.createElement('input');
+    search.id = 'build-search';
+    search.type = 'search';
+    search.placeholder = 'Buscar pieza…';
+    search.setAttribute?.('aria-label', 'Buscar pieza');
+    search.addEventListener('input', () => { this.buildQuery = search.value.trim().toLocaleLowerCase(); this.filterBuildCards(); });
+    search.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && search.value) {
+        search.value = ''; this.buildQuery = ''; this.filterBuildCards();
+        event.preventDefault(); event.stopPropagation();
+      }
+    });
+    const category = document.createElement('select');
+    category.id = 'build-category';
+    category.setAttribute?.('aria-label', 'Categoría de construcción');
+    for (const cat of [{ id: 'all', name: 'Todas las categorías' }, ...TOOL_CATEGORIES]) {
+      const option = document.createElement('option'); option.value = cat.id; option.textContent = cat.name; category.appendChild(option);
+    }
+    category.addEventListener('change', () => { this.buildFilter = category.value; this.filterBuildCards(); });
+    const lockedLabel = document.createElement('label');
+    lockedLabel.className = 'locked-filter';
+    const locked = document.createElement('input'); locked.type = 'checkbox'; locked.id = 'show-locked';
+    locked.addEventListener('change', () => { this.showLocked = locked.checked; this.filterBuildCards(); });
+    const lockedText = document.createElement('span'); lockedText.textContent = 'Ver piezas bloqueadas';
+    lockedLabel.appendChild(locked); lockedLabel.appendChild(lockedText);
+    filters.appendChild(search); filters.appendChild(category); filters.appendChild(lockedLabel);
+    toolsBox.appendChild(filters);
+    this.buildEmpty = document.createElement('p'); this.buildEmpty.className = 'panel-intro'; toolsBox.appendChild(this.buildEmpty);
     sec.appendChild(toolsBox);
     this.buildToolMoveBtn = mv;
     this.buildToolRemoveBtn = rm;
 
-    let keyIdx = 0;
     for (const cat of TOOL_CATEGORIES) {
       const wrap = document.createElement('div');
       wrap.className = 'build-group';
       const head = document.createElement('h4');
       head.textContent = cat.name;
       wrap.appendChild(head);
+      this.buildGroups.push({ el: wrap, category: cat });
       const grid = document.createElement('div');
       grid.className = 'build-grid';
       for (const type of cat.tools) {
+        const keyIdx = this.hotbarOrder.indexOf(type);
         const key = keyIdx < 9 ? String(keyIdx + 1) : '0';
-        const hasShortcut = keyIdx < 10;
-        keyIdx++;
+        const hasShortcut = keyIdx >= 0 && keyIdx < 10;
         const b = document.createElement('button');
         b.className = 'slot';
         b.dataset.type = type;
@@ -237,14 +311,40 @@ export class Hud {
           `<span class="slot-key${hasShortcut ? '' : ' hidden'}">${hasShortcut ? key : ''}</span>` +
           `<span class="slot-icon" data-icon="${type}">${ICONS[type] || '?'}</span>` +
           `<span class="slot-owned" data-owned="${type}"></span>`;
+        const name = document.createElement('span'); name.className = 'slot-name'; name.textContent = TOOL_LABELS[type] || TOOLS[type].name;
+        const price = document.createElement('span'); price.className = 'slot-price';
+        b.appendChild(name); b.appendChild(price);
+        b.setAttribute?.('aria-label', TOOLS[type].name);
         b.addEventListener('click', () => this.cb.onSelectTool(type));
         grid.appendChild(b);
         this.cards.set(type, b);
+        this.cardViews.set(type, { name, price, category: cat.id });
       }
       wrap.appendChild(grid);
       sec.appendChild(wrap);
     }
     this.refreshTooltips();
+    this.filterBuildCards();
+  }
+
+  filterBuildCards() {
+    for (const [type, card] of this.cards) {
+      const locked = !this.state.canBuyTool(type);
+      const view = this.cardViews.get(type);
+      const searchable = `${type} ${TOOLS[type].name} ${TOOL_LABELS[type]} ${TOOLS[type].hint}`
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
+      const query = this.buildQuery.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const matches = !query || searchable.includes(query);
+      const visible = (!locked || this.showLocked) && matches && (this.buildFilter === 'all' || view.category === this.buildFilter);
+      card.classList.toggle('hidden', !visible);
+      card.setAttribute?.('aria-disabled', String(locked));
+      view.price.textContent = locked ? `Desde ${ageInfo(toolUnlockAge(type)).name}` : formatMoney(this.state.toolPrice(type));
+    }
+    for (const { el, category } of this.buildGroups) {
+      el.classList.toggle('hidden', !category.tools.some((type) => !this.cards.get(type)?.classList.contains('hidden')));
+    }
+    this.buildEmpty.textContent = [...this.cards.values()].some((card) => !card.classList.contains('hidden'))
+      ? '' : 'No hay piezas con ese filtro. Probá otra categoría o activá «Ver piezas bloqueadas».';
   }
 
   buildHeightButtons() {
@@ -252,7 +352,7 @@ export class Hud {
     for (let h = 0; h <= 2; h++) {
       const b = document.createElement('button');
       b.className = 'height-btn' + (h === 0 ? ' selected' : '');
-      b.textContent = 'N' + h;
+      b.textContent = h === 0 ? 'Suelo · N0' : `Nivel ${h} · N${h}`;
       b.title = 'Altura N' + h + ' (H rota, clic fija)';
       b.addEventListener('click', () => this.cb.onHeight(h));
       this.el.heights.appendChild(b);
@@ -270,10 +370,6 @@ export class Hud {
   }
 
   setDirsToggle(on) {
-    this.el.btnDirs.classList.toggle('selected', Boolean(on));
-    this.el.btnDirs.title = on
-      ? 'Ocultar direcciones (G)'
-      : 'Mostrar direcciones (G)';
     this.el.actDirs.classList.toggle('selected', Boolean(on));
     this.el.actDirs.textContent = on ? 'Ocultar direcciones (G)' : 'Mostrar direcciones (G)';
   }
@@ -293,6 +389,11 @@ export class Hud {
   }
 
   setMode(mode) {
+    this.mode = mode;
+    this.buildContext?.classList.toggle('hidden', !mode || !mode.type && !mode.moving);
+    if (mode && this.activeTab !== 'build') this.openDrawer('build');
+    if (this.rotateBuildBtn) this.rotateBuildBtn.disabled = !mode || mode === 'remove' || mode === 'move-armed';
+    this.el.contextHelp.textContent = mode ? 'R: rotar · H: altura · Arrastrar: colocar en serie · Esc: cancelar' : 'Rueda: zoom · WASD: cámara · P: ayuda';
     for (const [type, card] of this.cards) {
       card.classList.toggle('selected', Boolean(mode && mode.type === type));
     }
@@ -306,10 +407,28 @@ export class Hud {
 
   toggleGlobalMenu() {
     this.el.globalMenu.classList.toggle('hidden');
+    this.el.btnMore.setAttribute?.('aria-expanded', String(!this.el.globalMenu.classList.contains('hidden')));
+    if (!this.el.globalMenu.classList.contains('hidden')) this.refreshLiquidationPreview();
   }
 
   hideGlobalMenu() {
     this.el.globalMenu.classList.add('hidden');
+    this.el.btnMore.setAttribute?.('aria-expanded', 'false');
+  }
+
+  refreshLiquidationPreview() {
+    const preview = this.cb.getLiquidationPreview?.();
+    if (!preview) return;
+    this.el.actSellGround.disabled = preview.count === 0 || preview.remaining > 0;
+    if (preview.count === 0) {
+      this.el.actSellGround.textContent = 'Sin productos sueltos para liquidar';
+    } else if (preview.remaining > 0) {
+      this.el.actSellGround.textContent = `Liquidar · disponible en ${preview.remaining}s`;
+    } else {
+      const noun = preview.count === 1 ? '1 producto' : `${preview.count} productos`;
+      this.el.actSellGround.textContent = `Liquidar ${noun} · ${formatMoney(preview.value)}`;
+    }
+    this.el.liquidationInfo.textContent = `Paga ${Math.round(preview.rate * 100)}% del valor base. Reduce el combo y no suma entregas.`;
   }
 
   // ---- cajón lateral (un panel por vez, cerrado por defecto) ----
@@ -319,99 +438,94 @@ export class Hud {
   }
 
   openDrawer(tab = 'build') {
+    if (tab === 'inspect' && !this.selectionInfo) tab = 'build';
+    this.scrollPositions.set(this.activeTab, this.el.panels[this.activeTab]?.scrollTop || 0);
+    this.activeTab = tab;
     this.el.drawer.classList.remove('hidden');
     this.el.drawerTabs.forEach((t) => t.classList.toggle('selected', t.dataset.tab === tab));
     for (const [k, sec] of Object.entries(this.el.panels)) {
       sec.classList.toggle('hidden', k !== tab);
     }
     this.renderDrawerTab(tab);
+    if (this.el.panels[tab]) this.el.panels[tab].scrollTop = this.scrollPositions.get(tab) || 0;
+    this.el.heading.textContent = { build: 'Construir', up: 'Mejoras globales', age: 'Próxima época', inspect: 'Esta pieza' }[tab];
+    this.el.btnInspect.classList.toggle('selected', tab === 'inspect');
+    this.el.btnDrawer.setAttribute?.('aria-expanded', 'true');
+    this.el.drawerTabs.forEach((t) => t.setAttribute?.('aria-pressed', String(t.dataset.tab === tab)));
   }
 
   closeDrawer() {
     this.el.drawer.classList.add('hidden');
+    this.el.btnDrawer.setAttribute?.('aria-expanded', 'false');
   }
 
   toggleDrawer(tab) {
-    if (!this.isDrawerOpen()) this.openDrawer(tab || 'build');
-    else if (tab) this.openDrawer(tab);
+    if (!this.isDrawerOpen()) this.openDrawer(tab || this.activeTab);
+    else if (tab && tab !== this.activeTab) this.openDrawer(tab);
     else this.closeDrawer();
   }
 
   renderDrawerTab(tab) {
     if (tab === 'up') this.renderUpgrades();
     else if (tab === 'age') this.renderAge();
-    else this.refreshTooltips();
+    else if (tab === 'build') this.refreshTooltips();
   }
 
   renderUpgrades() {
     const s = this.state;
     const sec = this.el.panels.up;
-    sec.innerHTML = '';
-    const head = document.createElement('p');
-    head.className = 'slots-line';
-    head.textContent = `Ranuras: ${s.usedUpgradeSlots()}/${s.totalUpgradeSlots()} usadas`;
-    sec.appendChild(head);
-    if (this.upgradeFocusType) {
-      const focus = document.createElement('div');
-      focus.className = 'up-focus';
-      const fanTxt =
-        this.upgradeFocusType === 'fan' && this.upgradeFocusInfo
-          ? ` · Fan tier ${this.upgradeFocusInfo.fanTier + 1}`
-          : '';
-      const tierTxt = this.upgradeFocusInfo ? `Tier edad ${this.upgradeFocusInfo.ageTier + 1}${fanTxt}` : '';
-      focus.innerHTML =
-        `<p><b>Construcción seleccionada:</b> ${TOOLS[this.upgradeFocusType]?.name || this.upgradeFocusType}</p>` +
-        (tierTxt ? `<p>${tierTxt}</p>` : '');
-      if (this.upgradeFocusInfo?.canUpgradeInPlace) {
-        const upBtn = document.createElement('button');
-        upBtn.className = 'up-buy';
-        upBtn.disabled = !this.upgradeFocusInfo.canAffordUpgradeInPlace;
-        upBtn.textContent = this.upgradeFocusInfo.canAffordUpgradeInPlace
-          ? `Mejorar in-place ${formatMoney(this.upgradeFocusInfo.upgradeCost)}`
-          : `Faltan fondos (${formatMoney(this.upgradeFocusInfo.upgradeCost)})`;
-        upBtn.addEventListener('click', () => this.cb.onUpgradeSelected?.());
-        focus.appendChild(upBtn);
-      } else {
-        const p = document.createElement('p');
-        p.className = 'up-focus-muted';
-        p.textContent = 'Sin tier siguiente disponible para esta construcción.';
-        focus.appendChild(p);
+    if (!this.upgradeRows) {
+      sec.innerHTML = '';
+      this.upgradeRows = new Map();
+      const intro = document.createElement('p'); intro.className = 'panel-intro';
+      intro.textContent = 'Estas compras afectan a todas las máquinas del tipo, incluidas las nuevas. Las ranuras se comparten en toda la granja.';
+      sec.appendChild(intro);
+      this.upgradeSlots = document.createElement('p'); this.upgradeSlots.className = 'slots-line'; sec.appendChild(this.upgradeSlots);
+      const filterLabel = document.createElement('label'); filterLabel.className = 'upgrade-filter'; filterLabel.textContent = 'Tipo de mejora';
+      this.upgradeFilter = document.createElement('select'); this.upgradeFilter.id = 'upgrade-filter';
+      const scopes = [...new Set(Object.values(UPGRADE_LINES).map((def) => def.obj))];
+      for (const obj of ['all', ...scopes]) {
+        const option = document.createElement('option'); option.value = obj;
+        option.textContent = obj === 'all' ? 'Todos los tipos' : obj === 'portal' ? 'Granero' : TOOL_LABELS[obj] || obj;
+        this.upgradeFilter.appendChild(option);
       }
-      if (this.upgradeFocusInfo?.isPausable) {
-        const pauseBtn = document.createElement('button');
-        pauseBtn.className = this.upgradeFocusInfo.isPaused ? 'up-buy danger' : 'up-buy success';
-        pauseBtn.textContent = this.upgradeFocusInfo.isPaused ? '▶ Reanudar ciclo' : '⏸ Pausar ciclo';
-        pauseBtn.addEventListener('click', () => this.cb.onPauseToggle?.());
-        focus.appendChild(pauseBtn);
+      this.upgradeFilter.addEventListener('change', () => {
+        this.upgradeFocusType = this.upgradeFilter.value === 'all' ? null : this.upgradeFilter.value;
+        this.renderUpgrades();
+        sec.scrollTop = 0;
+      });
+      filterLabel.appendChild(this.upgradeFilter); sec.appendChild(filterLabel);
+      for (const id of Object.keys(UPGRADE_LINES)) {
+        const row = document.createElement('div'); row.className = 'up-row'; row.dataset.upgrade = id;
+        const scope = document.createElement('span'); scope.className = 'up-scope';
+        const name = document.createElement('strong'); name.className = 'up-name';
+        const desc = document.createElement('span'); desc.className = 'up-desc';
+        const btn = document.createElement('button'); btn.className = 'up-buy'; btn.dataset.upgradeBuy = id;
+        btn.addEventListener('click', () => this.cb.onUpgrade(id));
+        const reason = document.createElement('span'); reason.className = 'up-reason';
+        for (const node of [scope, name, desc, btn, reason]) row.appendChild(node);
+        sec.appendChild(row); this.upgradeRows.set(id, { row, scope, name, desc, btn, reason });
       }
-      sec.appendChild(focus);
+      this.upgradeEmpty = document.createElement('p'); this.upgradeEmpty.className = 'panel-intro'; sec.appendChild(this.upgradeEmpty);
     }
-    const onlyObj = this.mapToolToUpgradeObj(this.upgradeFocusType);
-    for (const id of Object.keys(UPGRADE_LINES)) {
-    const def = s.upgradeDef(id);
-    if (onlyObj && onlyObj !== '__none__' && def.obj !== onlyObj) continue;
-    if (onlyObj === '__none__') continue;
-      const lvl = s.upgradeLevel(id);
-      const chk = s.canApplyUpgrade(id);
-      const row = document.createElement('div');
-      row.className = 'up-row';
-      const btn = document.createElement('button');
-      btn.className = 'up-buy';
-      btn.disabled = !chk.ok;
-      btn.textContent = chk.ok ? `Comprar ${formatMoney(s.upgradePrice(id))}` : (chk.reason || '—');
-      btn.addEventListener('click', () => this.cb.onUpgrade(id));
-      row.innerHTML =
-        `<span class="up-name">${def.name} <b>${lvl}/${def.max}</b></span>` +
-        `<span class="up-desc">${def.desc}</span>`;
-      row.appendChild(btn);
-      sec.appendChild(row);
+    this.upgradeSlots.textContent = `Ranuras compartidas: ${s.usedUpgradeSlots()}/${s.totalUpgradeSlots()} usadas`;
+    const onlyObj = this.upgradeFocusType === 'portal' ? 'portal' : this.mapToolToUpgradeObj(this.upgradeFocusType);
+    this.upgradeFilter.value = onlyObj && onlyObj !== '__none__' ? onlyObj : 'all';
+    let visible = 0;
+    for (const [id, view] of this.upgradeRows) {
+      const def = s.upgradeDef(id);
+      const matches = (!onlyObj || onlyObj === def.obj) && (s.level === undefined || def.age <= s.level);
+      view.row.classList.toggle('hidden', !matches);
+      if (!matches) continue;
+      visible++;
+      view.scope.textContent = def.obj === 'portal' ? 'Todas las entregas al granero' : `Todas las máquinas: ${TOOL_LABELS[def.obj] || def.obj}`;
+      view.name.textContent = `${def.name.replace('Portal:', 'Granero:')} · ${s.upgradeLevel(id)}/${def.max}`;
+      view.desc.textContent = def.desc;
+      view.btn.textContent = `Comprar ${formatMoney(s.upgradePrice(id))}`;
+      view.btn.disabled = !s.canApplyUpgrade(id).ok;
+      view.reason.textContent = upgradeReason(s, id);
     }
-    if (onlyObj && sec.children.length === 2) {
-      const p = document.createElement('p');
-      p.className = 'up-focus-muted';
-      p.textContent = 'Esta construcción no tiene mejoras de línea.';
-      sec.appendChild(p);
-    }
+    this.upgradeEmpty.textContent = visible ? '' : 'Este tipo no tiene mejoras globales disponibles en tu época.';
   }
 
   mapToolToUpgradeObj(type) {
@@ -421,6 +535,7 @@ export class Hud {
     if (type === 'corral') return 'corral';
     if (type === 'palomitera') return 'palomitera';
     if (type === 'jamonera') return 'jamonera';
+    if (type === 'jamonera_industrial') return 'jamonera';
     if (type === 'silo') return 'silo';
     return '__none__';
   }
@@ -433,8 +548,8 @@ export class Hud {
 
   renderAge() {
     const s = this.state;
-    const sec = this.el.panels.age;
-    sec.innerHTML = '';
+    const target = this.el.panels.age;
+    const sec = document.createElement('div');
     const cur = document.createElement('p');
     cur.className = 'age-cur';
     cur.textContent = `Edad actual: ${s.ageInfo().name} (x${s.levelInfo.mult} ingresos)`;
@@ -444,6 +559,7 @@ export class Hud {
       const p = document.createElement('p');
       p.textContent = 'Edad máxima. Chanchos S.A. al 100%.';
       sec.appendChild(p);
+      reconcileChildren(target, sec);
       return;
     }
     const box = document.createElement('div');
@@ -452,12 +568,17 @@ export class Hud {
       ? prev.tools.map((t) => t.name).join(', ')
       : 'sin herramientas nuevas';
     const prods = prev.products.map((p) => p.name).join(', ');
-    box.innerHTML =
-      `<p><b>Siguiente: ${prev.name}</b> — ${formatMoney(prev.cost)}</p>` +
+    box.innerHTML = `<p><b>Siguiente: ${prev.name}</b></p>`;
+    const unlocks = document.createElement('details');
+    unlocks.className = 'age-unlocks';
+    unlocks.innerHTML = '<summary>Qué cambia al avanzar</summary>' +
       `<p>${prev.slogan}</p>` +
       `<p>Desbloquea: ${tools}</p>` +
       `<p>Productos: ${prods} · Ventilador tier ${prev.fanTier + 1} · x${prev.mult} ingresos</p>` +
       `<p>Combo máximo en la próxima edad: x${s.level + 1 < 4 ? COMBO_MAX_BY_AGE[s.level + 1] : COMBO_MAX_BY_AGE[3]}.</p>`;
+    const moneyLine = document.createElement('p'); moneyLine.className = 'age-money';
+    moneyLine.textContent = `Dinero: ${formatMoney(Math.min(s.money, prev.cost))} / ${formatMoney(prev.cost)}${s.money >= prev.cost ? ' ✓' : ''}`;
+    box.appendChild(moneyLine);
     // M1.5-J1: metas de entrega por producto (solo portal).
     const goal = prev.goal;
     if (goal && goal.length) {
@@ -488,12 +609,29 @@ export class Hud {
     const ready = s.money >= prev.cost && (!prev.goal || prev.goal.every((g) => (s.deliveredKinds?.[g.kind] || 0) >= g.count));
     btn.disabled = !ready;
     btn.textContent = ready
-      ? `Subir de edad: ${formatMoney(prev.cost)}`
-      : `Faltan metas / dinero (${formatMoney(prev.cost)})`;
-    btn.title = 'Las entregas cuentan solo por el portal; liquidar no suma.';
-    btn.addEventListener('click', () => this.cb.onLevel());
+      ? `Avanzar de época · ${formatMoney(prev.cost)}`
+      : s.money < prev.cost ? `Te faltan ${formatMoney(prev.cost - s.money)}` : 'Faltan entregas al granero';
+    btn.title = 'Necesitás cumplir dinero y entregas a la vez. Liquidar no suma entregas.';
     box.appendChild(btn);
+    box.appendChild(unlocks);
     sec.appendChild(box);
+    reconcileChildren(target, sec);
+  }
+
+  refreshObjective() {
+    const progress = ageProgress(this.state);
+    if (!progress) {
+      this.el.objective.classList.remove('ready');
+      this.el.objectiveTitle.textContent = 'Época final';
+      this.el.objectiveSummary.textContent = 'Tu granja llegó a Fábrica';
+      this.el.objectiveProgress.value = 1;
+      return;
+    }
+    this.el.objectiveTitle.textContent = progress.ready ? `${progress.name} lista · Ver progreso` : `Próxima época: ${progress.name}`;
+    this.el.objectiveSummary.textContent = progress.summary;
+    this.el.objectiveProgress.value = progress.progress;
+    this.el.objective.classList.toggle('ready', progress.ready);
+    this.el.objective.setAttribute?.('aria-label', `${this.el.objectiveTitle.textContent}. ${progress.summary}`);
   }
 
   // M1.5-J1c fix: la pestaña Edad sólo muestra la meta de la PRÓXIMA transición,
@@ -507,41 +645,60 @@ export class Hud {
   // ---- selección ----
 
   showSelection(info) {
-    const el = this.el.sel;
+    const target = this.el.sel;
+    this.selectionInfo = info;
+    this.el.btnInspect.textContent = info ? `Esta pieza: ${TOOL_LABELS[info.type] || info.name}` : 'Esta pieza';
+    this.el.btnInspect.classList.toggle('hidden', !info);
     // M1.5-G fix: el frame loop re-llama cada frame; si nada cambió se saltea
     // el rebuild (menos churn de DOM; los clics van por delegación igual).
     if (info) {
       let sig = '';
       try {
-        sig = JSON.stringify(info);
+        sig = JSON.stringify([info, Math.floor(this.state.money)]);
       } catch {
         sig = String(Math.random());
       }
-      if (sig === this._selSig && !el.classList.contains('hidden')) return;
+      if (sig === this._selSig && !target.classList.contains('hidden')) return;
       this._selSig = sig;
     } else {
       this._selSig = null;
     }
-    el.innerHTML = '';
     if (!info) {
-      this.upgradeFocusType = null;
       this.upgradeFocusInfo = null;
       if (this.isDrawerOpen()) {
         const tab = this.el.drawerTabs.find((t) => t.classList.contains('selected'))?.dataset.tab || 'build';
         if (tab === 'up') this.renderUpgrades();
       }
-      el.classList.add('hidden');
+      target.innerHTML = '';
+      target.classList.add('hidden');
+      if (this.activeTab === 'inspect') {
+        const wasOpen = this.isDrawerOpen();
+        this.openDrawer('build');
+        if (!wasOpen) this.closeDrawer();
+      }
       return;
     }
-    el.classList.remove('hidden');
+    target.classList.remove('hidden');
+    const el = document.createElement('div');
     const txt = document.createElement('span');
     txt.className = 'sel-txt';
-    txt.textContent = `${info.name} · frente ${info.dir} · N${info.h}`;
+    txt.textContent = info.name;
     el.appendChild(txt);
+    const position = document.createElement('p'); position.className = 'sel-sub';
+    position.textContent = `Frente ${info.dir} · ${info.h === 0 ? 'Suelo' : `Nivel ${info.h}`} · Material ${ageInfo(info.ageTier || 0).name}`;
+    el.appendChild(position);
+    if (info.hint && !info.recipeInputs?.length && !info.fanInfo && !info.siloInfo) {
+      const hint = document.createElement('p'); hint.className = 'sel-hint'; hint.textContent = info.hint; el.appendChild(hint);
+    }
+    if (info.isSembrador || (info.isPausable && !info.recipeInputs?.length && !info.siloInfo)) {
+      const stateLine = document.createElement('p'); stateLine.className = 'sel-state';
+      stateLine.textContent = info.isPaused ? 'Pausada' : info.isManual ? 'Manual · emití choclos o comprá velocidad global para automatizar' : 'Produciendo automáticamente';
+      el.appendChild(stateLine);
+    }
     if (Array.isArray(info.recipeInputs) && info.recipeInputs.length) {
       const recipeLine = document.createElement('div');
       recipeLine.className = 'sel-sub';
-      recipeLine.textContent = `Receta: ${info.recipeInputs.map((r) => r.name).join(' + ')}`;
+      recipeLine.textContent = `Receta: ${info.recipeInputs.map((r) => r.name).join(' + ')} → ${info.outputName || 'producto'}`;
       el.appendChild(recipeLine);
 
       if (info.recipeInputs.length > 1) {
@@ -618,13 +775,13 @@ export class Hud {
       const f = info.fanInfo;
       const tierLine = document.createElement('div');
       tierLine.className = 'sel-sub';
-      tierLine.textContent = `Ventilador tier ${f.tier + 1}`;
+      tierLine.textContent = `Nivel de ventilador ${f.tier + 1}`;
       el.appendChild(tierLine);
 
       const powLine = document.createElement('div');
       powLine.className = 'sel-state';
-      powLine.textContent =
-        `Potencia ${f.powerPct} % (${f.forceEff.toFixed(2)} de ${f.forceMax.toFixed(2)} máx tier)`;
+      powLine.textContent = `Potencia: ${f.powerPct} % del nivel actual`;
+      powLine.title = `Fuerza física: ${f.forceEff.toFixed(2)} de ${f.forceMax.toFixed(2)}`;
       el.appendChild(powLine);
 
       const rangeLine = document.createElement('div');
@@ -657,7 +814,7 @@ export class Hud {
     actions.className = 'sel-actions';
     if (info.isSembrador) {
       const b = document.createElement('button');
-      b.textContent = 'Emitir';
+      b.textContent = 'Emitir choclo';
       b.title = 'Emite 1 choclo gratis (igual que clic en la pieza)';
       b.dataset.act = 'emit';
       actions.appendChild(b);
@@ -679,9 +836,9 @@ export class Hud {
       up.className = 'upgrade';
       up.disabled = !info.canAffordUpgradeInPlace;
       up.textContent = info.canAffordUpgradeInPlace
-        ? `Mejorar ${formatMoney(info.upgradeCost)}`
-        : `Mejorar ${formatMoney(info.upgradeCost)}`;
-      up.title = 'Sube esta construcción al siguiente tier sin demoler/reponer';
+        ? `Actualizar esta pieza · ${formatMoney(info.upgradeCost)}`
+        : `Actualizar esta pieza · faltan ${formatMoney(info.upgradeCost - this.state.money)}`;
+      up.title = 'Actualiza solo el material o nivel de esta pieza. No consume ranuras de mejoras globales.';
       up.dataset.act = 'upgrade';
       actions.appendChild(up);
     }
@@ -696,6 +853,14 @@ export class Hud {
     actions.appendChild(rm);
     actions.appendChild(x);
     el.appendChild(actions);
+    if (this.mapToolToUpgradeObj(info.type) !== '__none__') {
+      const global = document.createElement('button'); global.className = 'global-upgrade-link';
+      global.textContent = 'Ver mejoras globales de este tipo'; global.dataset.act = 'global-upgrades';
+      el.appendChild(global);
+    }
+    const rotate = document.createElement('button'); rotate.className = 'rotate-piece';
+    rotate.textContent = 'Rotar esta pieza (R)'; rotate.dataset.act = 'rotate'; el.appendChild(rotate);
+    reconcileChildren(target, el);
   }
 
   // ---- guía inicial (primer minuto) ----
@@ -708,11 +873,13 @@ export class Hud {
     this.el.guide.classList.remove('hidden');
     clearTimeout(this._guideTimer);
     this._guideTimer = setTimeout(() => this.hideGuide(), 60000);
+    this.el.btnHelp.setAttribute?.('aria-expanded', 'true');
   }
 
   hideGuide() {
     this.el.guide.classList.add('hidden');
     clearTimeout(this._guideTimer);
+    this.el.btnHelp.setAttribute?.('aria-expanded', 'false');
   }
 
   // ---- refresco ----
@@ -722,6 +889,7 @@ export class Hud {
     this.el.money.textContent = formatMoney(s.money);
     this.el.levelName.textContent = s.levelInfo.name;
     this.el.age.textContent = s.ageInfo().name;
+    this.refreshObjective();
     for (const type of this.hotbarOrder) {
       const card = this.cards.get(type);
       if (!card) continue;
@@ -732,14 +900,15 @@ export class Hud {
       if (ownedEl) ownedEl.textContent = s.owned[type] > 0 ? `x${s.owned[type]}` : '';
     }
     this.refreshTooltips();
+    this.filterBuildCards();
     if (this.isDrawerOpen()) {
-      const tab = this.el.drawerTabs.find((t) => t.classList.contains('selected'))?.dataset.tab || 'up';
-      this.renderDrawerTab(tab);
+      this.renderDrawerTab(this.activeTab);
     }
   }
 
   update(nowMs) {
     const s = this.state;
+    if (!this.el.globalMenu.classList.contains('hidden')) this.refreshLiquidationPreview();
     if (s.comboActive(nowMs)) {
       this.el.combo.classList.remove('hidden');
       const frac = Math.max(0, (s.comboUntil - nowMs) / s.comboWindowMs());
